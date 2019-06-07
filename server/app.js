@@ -92,49 +92,37 @@ app.post('/api/upload', upload.single('file'), function (req, res) {
 
 });
 
+// Thanks: https://medium.com/@richard534/uploading-streaming-audio-using-nodejs-express-mongodb-gridfs-b031a0bcb20f
 app.get('/api/download/:id', (req, res) => {
 
   try {
-    var trackID = new ObjectID(req.params.id);
+    var trackId = new ObjectID(req.params.id);
   } catch (err) {
     return res.status(400).json({
-      message: "Invalid trackID in URL parameter. Must be a single String of 12 bytes or a string of 24 hex characters"
+      message: "Invalid trackId in URL parameter. Must be a single String of 12 bytes or a string of 24 hex characters"
     });
   }
 
-  res.set('content-type', 'audio/mp3');
+  res.set('content-type', 'audio/wav');
   res.set('accept-ranges', 'bytes');
 
   let bucket = new mongodb.GridFSBucket(db, {
     bucketName: 'tracks'
   });
-  // bucket.find().toArray().then((data) => {
-  //   // Here you can do something with your data
-  //   result = data.toArray()
-  //   console.log(result)
-  // })
-  // bucket.find().ap
-  // 
-  // async function getResults() {
-  //   bucket.find();
-  // }
 
-  // var results = await getResults();
-  // results = results.toArray();
-  // console.log(results)
-  let downloadStream = bucket.openDownloadStream(trackID);
+  let downloadStream = bucket.openDownloadStream(trackId);
 
-  // downloadStream.on('data', (chunk) => {
-  //   res.write(chunk);
-  // });
+  downloadStream.on('data', (chunk) => {
+    res.write(chunk);
+  });
 
-  // downloadStream.on('error', () => {
-  //   res.sendStatus(404);
-  // });
+  downloadStream.on('error', () => {
+    res.sendStatus(404);
+  });
 
-  // downloadStream.on('end', () => {
-  //   res.end();
-  // });
+  downloadStream.on('end', () => {
+    res.end();
+  });
 });
 
 app.get('/api/list', (req, res) => {

@@ -1,5 +1,8 @@
 import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
+
+import { EventEmitter } from './EventEmitter';
+
 /**
  * Use case: audio player with dynamic source in react
  *
@@ -11,7 +14,17 @@ import ReactDOM from 'react-dom';
  */
 export default class AudioPlayerDOM extends Component {
 
+  componentDidMount() {
+
+    const element = ReactDOM.findDOMNode(this);
+    const audio = element.querySelector('audio');
+
+    audio.onended = () => this.audioDone();
+
+  }
+
   componentWillReceiveProps(nextProps) {
+
     // Find some DOM nodes
     const element = ReactDOM.findDOMNode(this);
     const audio = element.querySelector('audio');
@@ -24,15 +37,31 @@ export default class AudioPlayerDOM extends Component {
       // Cause the audio element to load the new source
       audio.load();
     }
+
+    // When playnow prop true, play audio
+    if ((nextProps.playnow) && (nextProps.playnow !== this.props.playnow)) {
+      // Cause the audio element to play
+      audio.play();
+    }
+
   }
+
+  audioDone() {
+
+    EventEmitter.dispatch('audiodone', null);
+
+  }
+
   render() {
+
     return (
-      <div>
-        <audio controls>
+      <div hidden={this.props.hidden}>
+        <audio autoPlay={this.props.autoplay} controls>
           <source src={this.props.src} />
         </audio>
       </div>
     );
+    
   }
   
 }

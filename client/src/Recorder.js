@@ -1,22 +1,28 @@
-import React, { Component } from 'react'
-import ReactDOM from 'react-dom';
+import React, {
+    Component
+} from 'react'
 import RecorderJS from 'recorderjs';
 import AudioPlayerDOM from './AudioPlayerDOM';
-
-// import * as Roundware from 'roundware-web-framework/dist/roundware';
 
 class Recorder extends Component {
 
     
-    constructor(props){
-        super(props) 
+    constructor(props) {
+        
+        super(props);
+        
+        this.fileBlob = null;
         this.state = {
+            audioUrl: null,
+            
+            playnow: false,
             stream: null,
+
             recording: false,
-            recorder: null,
-            roundware: null,
-            audioUrl: null
-        };        
+            recorded: false,
+            recorder: null
+        };
+
     }
 
     getAudioStream() {
@@ -54,97 +60,99 @@ class Recorder extends Component {
     }
 
     async componentDidMount() {
-        let stream;      
+
+        let stream;
+ 
         try {
-            
+
             stream = await this.getAudioStream();
-        
+
         } catch (error) {
 
-          // Browser doesn't support audio
-          console.error(error);
-        }
-      
-        this.setState({ stream });
-      }
+            // Browser doesn't support audio
+            console.error(error);
 
-      startRecord() {
-        const { stream } = this.state;
-      
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        this.setState({
+            stream
+        });
+
+    }
+
+    startRecord() {
+        
+        const {
+            stream
+        } = this.state;
+
+        const audioContext = new(window.AudioContext || window.webkitAudioContext)();
         const ctxSource = audioContext.createMediaStreamSource(stream);
-        
+
         const recorder = new RecorderJS(ctxSource);
-        // recorder.init(stream);
-        
-        this.setState(
-            {
+
+        this.setState({
                 recorder,
                 recording: true
             },
             () => {
-                // recorder.start();
                 recorder.record();
             }
         );
-      }
-      
-      stopRecord() {
-        const { recorder } = this.state;      
-        recorder.stop();
+
+    }
+
+    stopRecord() {
         
+        const {
+            recorder
+        } = this.state;
+        recorder.stop();
+
         recorder.exportWAV((blob) => {
 
             let url = URL.createObjectURL(blob);
+            this.fileBlob = blob;
 
-            const element = ReactDOM.findDOMNode(this);
-            const audio = element.querySelector('audio');
-            
-            let fd = new FormData();
-            fd.append('file', blob, 'blobby.wav');
-    
-            fetch('http://localhost:3001/api/upload',
-              {
-                method: 'post',
-                body: fd
-              })
-            .then(function(response) {
-              console.log('done');
-              return response;
-            })
-            .catch(function(err){ 
-              console.log(err);
-            });
-    
-            
             this.setState({
-                audioUrl: url
+                audioUrl: url,
+                recorded: true
             });
-            audio.load();
 
         });
-        // console.log(blob)
-        // RecorderJS.download(blob, 'test');
-        
-        //   console.log(data);
-        //   let postRecordingMessage = "Thank you for submitting your recording! Please click OK to make another.";
-        
 
-      }
-
-      getAudio(blob) {
-
-        const { audioUrl } = this.state;
-        
-      
     }
 
-      async playStream() {
+    async playStream() {
 
-      }
+        this.setState({
+            playnow: true
+        });
 
-    render(){
-        const { recording, stream } = this.state;
+    }
+
+    async upload() {
+
+        let fd = new FormData();
+        fd.append('file', this.fileBlob);
+
+        fetch('http://localhost:3001/api/upload', {
+            method: 'post',
+            body: fd
+        })
+        .then(function (response) {
+            console.log('upload');
+            return response;
+        })
+        .catch(function (err) {
+            console.log(err);
+        });
+
+    }
+
+    render() {
+
+        const { recording, playnow } = this.state;
 
         return (
             <div>
@@ -157,18 +165,21 @@ class Recorder extends Component {
                 </button>
             
                 <button
+                hidden={!this.state.recorded}
                 onClick={() => { this.playStream(); }}>
                     Play
-                </button>    
-                <AudioPlayerDOM src={this.state.audioUrl} />
+                </button>
+                <button
+                hidden={!this.state.recorded}
+                onClick={() => { this.upload(); }}>
+                    Upload
+                </button>
+                <AudioPlayerDOM src={this.state.audioUrl} hidden={true} playnow={playnow} />
          
             </div>
         );
+
     }
 }
-
-Recorder.propTypes = {
-
-};
 
 export default Recorder
