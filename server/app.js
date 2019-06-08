@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 var createError = require('http-errors');
 var express = require('express');
 var path = require('path');
@@ -9,7 +11,13 @@ var app = express();
 
 const mongodb = require('mongodb');
 const MongoClient = require('mongodb').MongoClient;
-const ObjectID = require('mongodb').ObjectID;
+const ObjectID = require('mongodb').ObjectID,
+  dateFormat = require('dateformat');
+
+const {
+  WebClient
+} = require('@slack/web-api');
+const slackWeb = new WebClient(process.env.SLACK_TOKEN);
 
 /**
  * NodeJS Module dependencies.
@@ -18,18 +26,12 @@ const {
   Readable
 } = require('stream');
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
-
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({
   extended: false
 }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
-
 
 // Setup Route Bindings 
 // CORS
@@ -64,31 +66,95 @@ var upload = multer({
   storage: memory
 });
 
-app.post('/api/upload', upload.single('file'), function (req, res) {
+const slackUpload = async (stream, fileId) => {
 
-  const readableTrackStream = new Readable();
-  readableTrackStream.push(req.file.buffer);
-  readableTrackStream.push(null);
+  const fileName = 'bb-audio_' + dateFormat(Date.now(), 'mm-d-yy h:MM:sstt') + '.wav';
+  const result = await slackWeb.files.upload({
+    channels: '#' + process.env.SLACK_CHANNEL,
+    filename: fileName,
+    filetype: 'wav',
+    file: stream
+  });
+  let msg = "Please listen to submitted audio above and approve or delete. (_" + fileName + "_)"; 
 
-  let bucket = new mongodb.GridFSBucket(db, {
-    bucketName: 'tracks'
+  await slackWeb.chat.postMessage({
+    text: '',
+    channel: '#' + process.env.SLACK_CHANNEL,
+    blocks: [
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": msg
+        }
+      },
+      {
+      "type": "actions",
+      "elements": [{
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "Approve",
+            "emoji": false
+          },
+          "style": "primary",
+          "value": fileId
+        },
+        {
+          "type": "button",
+          "text": {
+            "type": "plain_text",
+            "text": "Delete",
+            "emoji": false
+          },
+          "style": "danger"
+        }
+      ]
+    }]
   });
 
-  let uploadStream = bucket.openUploadStream('audio-' + Date.now() + '.wav');
-  let id = uploadStream.id;
-  readableTrackStream.pipe(uploadStream);
+  return result.file.url_private;
+};
 
-  uploadStream.on('error', () => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+
+  try {
+
+    const fileName = 'bb-audio-' + Date.now() + '.wav';
+    const readableTrackStream = new Readable();
+    readableTrackStream.push(req.file.buffer);
+    readableTrackStream.push(null);
+
+    let bucket = new mongodb.GridFSBucket(db, {
+      bucketName: 'tracks'
+    });
+
+    let uploadStream = bucket.openUploadStream(fileName, {metadata: {approved: false}});
+    let id = uploadStream.id;
+    
+    await slackUpload(readableTrackStream, id);
+    
+    readableTrackStream.pipe(uploadStream);
+
+    uploadStream.on('error', (err) => {
+      return res.status(500).json({
+        message: "Error uploading file: " + err
+      });
+    });
+
+    uploadStream.on('finish', () => {
+      return res.status(201).json({
+        message: "File uploaded successfully, stored under id: " + id
+      });
+    });
+
+  } catch (e) {
+
     return res.status(500).json({
-      message: "Error uploading file"
+      message: e
     });
-  });
-
-  uploadStream.on('finish', () => {
-    return res.status(201).json({
-      message: "File uploaded successfully, stored under Mongo ObjectID: " + id
-    });
-  });
+    
+  }
 
 });
 
@@ -127,32 +193,40 @@ app.get('/api/download/:id', (req, res) => {
 
 app.get('/api/list', (req, res) => {
 
-  db.collection('tracks.files').find({}, {_id: 1}).toArray(function(err, result) {
-    
+  db.collection('tracks.files').find({}, {
+    _id: 1
+  }).toArray(function (err, result) {
+
     if (err) throw err;
-  
+
     res.status(200).send(result);
-    
+
   });
 
-})
-
-// catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404));
 });
 
-// error handler
-app.use(function (err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+app.post('/api/response', (req, res) => {
 
-  if (err) console.error(err);
+  let action = JSON.parse(req.body.payload).actions[0];
 
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
+  console.log(action);
+  // res.status(200).send("ok")
+  // db.collection('tracks.files').find({}, {
+  //   _id: 1
+  // })
+
+  if(action.action_id === 'LPoCK') {
+    
+    let objectID = require('mongodb').ObjectID;
+    let record = { '_id': objectID(action.value)};
+    let update = { $set: { 'metadata.approved': true }};
+    db.collection('tracks.files').updateOne(record, update, (err, result) => {
+      console.log('updated');
+      res.status(200);
+    });
+
+  }
+
 });
 
 module.exports = app;

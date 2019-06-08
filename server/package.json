@@ -6,13 +6,18 @@
     "start": "node ./bin/www"
   },
   "dependencies": {
+    "@slack/events-api": "^2.2.0",
+    "@slack/web-api": "^5.0.1",
     "cookie-parser": "~1.4.4",
+    "dateformat": "^3.0.3",
     "debug": "~2.6.9",
+    "dotenv": "^8.0.0",
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
     "mongodb": "^2.2.33",
     "morgan": "~1.9.1",
-    "multer": "^1.4.1"
+    "multer": "^1.4.1",
+    "slack": "^11.0.2"
   }
 }
