@@ -70,18 +70,17 @@ const slackUpload = async (stream, fileId) => {
 
   const fileName = 'bb-audio_' + dateFormat(Date.now(), 'mm-d-yy h:MM:sstt') + '.wav';
   const result = await slackWeb.files.upload({
-    channels: '#' + process.env.SLACK_CHANNEL,
+    channels: process.env.SLACK_CHANNEL,
     filename: fileName,
     filetype: 'wav',
     file: stream
   });
-  let msg = "Please listen to submitted audio above and approve or delete. (_" + fileName + "_)"; 
+  let msg = "Please listen to submitted audio above and approve or delete. (_" + fileName + "_) *Please note:* deletion is not currently reversable!";
 
   await slackWeb.chat.postMessage({
     text: '',
-    channel: '#' + process.env.SLACK_CHANNEL,
-    blocks: [
-      {
+    channel: process.env.SLACK_CHANNEL,
+    blocks: [{
         "type": "section",
         "text": {
           "type": "mrkdwn",
@@ -89,28 +88,31 @@ const slackUpload = async (stream, fileId) => {
         }
       },
       {
-      "type": "actions",
-      "elements": [{
-          "type": "button",
-          "text": {
-            "type": "plain_text",
-            "text": "Approve",
-            "emoji": false
+        "type": "actions",
+        "elements": [{
+            "type": "button",
+            "action_id": "approve",
+            "text": {
+              "type": "plain_text",
+              "text": "Approve",
+              "emoji": false
+            },
+            "style": "primary",
+            "value": fileId
           },
-          "style": "primary",
-          "value": fileId
-        },
-        {
-          "type": "button",
-          "text": {
-            "type": "plain_text",
-            "text": "Delete",
-            "emoji": false
-          },
-          "style": "danger"
-        }
-      ]
-    }]
+          {
+            "type": "button",
+            "action_id": "delete",
+            "text": {
+              "type": "plain_text",
+              "text": "Delete",
+              "emoji": false
+            },
+            "style": "danger"
+          }
+        ]
+      }
+    ]
   });
 
   return result.file.url_private;
@@ -129,11 +131,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       bucketName: 'tracks'
     });
 
-    let uploadStream = bucket.openUploadStream(fileName, {metadata: {approved: false}});
+    let uploadStream = bucket.openUploadStream(fileName, {
+      metadata: {
+        approved: false
+      }
+    });
     let id = uploadStream.id;
-    
+
     await slackUpload(readableTrackStream, id);
-    
+
     readableTrackStream.pipe(uploadStream);
 
     uploadStream.on('error', (err) => {
@@ -153,7 +159,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     return res.status(500).json({
       message: e
     });
-    
+
   }
 
 });
@@ -178,22 +184,26 @@ app.get('/api/download/:id', (req, res) => {
 
   let downloadStream = bucket.openDownloadStream(trackId);
 
+  console.log('download')
   downloadStream.on('data', (chunk) => {
+    console.log(chunk)
     res.write(chunk);
   });
 
-  downloadStream.on('error', () => {
+  downloadStream.on('error', (err) => {
+    console.log(err)
     res.sendStatus(404);
   });
 
-  downloadStream.on('end', () => {
+  downloadStream.on('end', (data) => {
+    console.log('end', data)
     res.end();
   });
 });
 
 app.get('/api/list', (req, res) => {
 
-  db.collection('tracks.files').find({}, {
+  db.collection('tracks.files', {'metadata.approved': true}).find({}, {
     _id: 1
   }).toArray(function (err, result) {
 
@@ -205,24 +215,74 @@ app.get('/api/list', (req, res) => {
 
 });
 
-app.post('/api/response', (req, res) => {
+app.post('/api/response', async (req, res) => {
 
-  let action = JSON.parse(req.body.payload).actions[0];
 
-  console.log(action);
-  // res.status(200).send("ok")
-  // db.collection('tracks.files').find({}, {
-  //   _id: 1
-  // })
+  try {
 
-  if(action.action_id === 'LPoCK') {
-    
+    let response = JSON.parse(req.body.payload);
+    let action = response.actions[0];
+    let userName = response.user.name;
+    let timestamp = response.message.ts;
+
     let objectID = require('mongodb').ObjectID;
-    let record = { '_id': objectID(action.value)};
-    let update = { $set: { 'metadata.approved': true }};
-    db.collection('tracks.files').updateOne(record, update, (err, result) => {
-      console.log('updated');
-      res.status(200);
+    let record = {
+      '_id': objectID(action.value)
+    };
+
+    if (action.action_id === 'approve') {
+      let update = {
+        $set: {
+          'metadata.approved': true
+        }
+      };
+      db.collection('tracks.files').updateOne(record, update, async (err, result) => {
+
+        if (err) {
+          await slackWeb.chat.update({
+            text: 'Error! Let @johnny know ASAP! And then bring him whiskey!!',
+            channel: process.env.SLACK_CHANNEL,
+          });
+        } else {
+          await slackWeb.chat.update({
+            text: '@' + userName + ' approved this audio.',
+            channel: process.env.SLACK_CHANNEL,
+            blocks: [],
+            ts: timestamp,
+            link_names: true
+          });
+        }
+
+        if (err) res.sendStatus(500);
+        res.sendStatus(200)
+
+      });
+    } else {
+      db.collection('tracks.files').deleteOne(record, async (err, result) => {
+
+        let test = true;
+        let msg = test ? 'Error! Let @johnny know ASAP! And then bring him beer!! (This audio is still not approved, don\'t worry)' : '@' + userName + ' deleted this audio.';
+        let bodyObj = {
+          text: msg,
+          channel: process.env.SLACK_CHANNEL,
+          blocks: [],
+          ts: timestamp,
+          link_names: true
+        };
+        
+        // TODO: Don't remove buttons if fail in case of connection drop; we'll assume for now stable connection
+        // if(test) bodyObj.blocks = response.message.blocks;
+        await slackWeb.chat.update(bodyObj);
+
+        if (err) res.sendStatus(500);
+        res.sendStatus(200);
+
+      });
+    }
+  } catch (e) {
+
+    return res.status(500).json({
+      message: e
     });
 
   }

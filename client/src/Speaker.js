@@ -10,6 +10,7 @@ class Speaker extends Component {
     constructor(props){
         super(props) 
         this.state = {
+            isStarted: false,
             audioUrl: null,
             playlist: null,
             trackIds: [],
@@ -18,8 +19,6 @@ class Speaker extends Component {
     }
 
     async componentDidMount() {
-
-        this.updatePlaylist();
 
         EventEmitter.subscribe('audiodone', () => {
             setTimeout(() => this.nextTrack(), 500);
@@ -64,26 +63,27 @@ class Speaker extends Component {
         if(!id) return;
 
         var context = new AudioContext();
-
+        
         fetch('http://localhost:3001/api/download/'+id)
         .then(response => response.arrayBuffer())
         .then(buf => {
+            
+            console.log(buf)
+            // context.decodeAudioData(buf, (buffer) => 
+            // {
+            //     // encode AudioBuffer to WAV
+            //     var wav = audioBufferToWav(buffer)
+            //     var blob = new Blob([ new DataView(wav) ], {
+            //         type: 'audio/wav'
+            //     });
                 
-            context.decodeAudioData(buf, (buffer) => 
-            {
-                // encode AudioBuffer to WAV
-                var wav = audioBufferToWav(buffer)
-                var blob = new Blob([ new DataView(wav) ], {
-                    type: 'audio/wav'
-                });
+            //     let url = URL.createObjectURL(blob);            
                 
-                let url = URL.createObjectURL(blob);            
+            //     this.setState({
+            //         audioUrl: url
+            //     });
                 
-                this.setState({
-                    audioUrl: url
-                });
-                
-              });
+            //   });
 
          })
         .catch(function(err){ 
@@ -95,7 +95,17 @@ class Speaker extends Component {
     render(){
         return (
             <div>
-                <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
+                <div hidden={!this.state.isStarted}>
+                    <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
+                </div>
+                
+                <div 
+                hidden={this.state.isStarted}>
+                    <button
+                    onClick={() => { this.updatePlaylist(); }}>
+                        Start Stream
+                    </button>
+                </div>
             </div>
         );
     }
