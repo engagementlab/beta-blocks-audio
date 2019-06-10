@@ -118,7 +118,7 @@ const slackUpload = async (stream, fileId) => {
   return result.file.url_private;
 };
 
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload/:file_id?', upload.single('file'), async (req, res) => {
 
   try {
 
@@ -126,6 +126,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const readableTrackStream = new Readable();
     readableTrackStream.push(req.file.buffer);
     readableTrackStream.push(null);
+
+    if(req.params.file_id) {
+      await slackUpload(readableTrackStream, req.params.file_id.replace(/"/g, ''));
+      return res.status(200).send('done');
+    }
 
     let bucket = new mongodb.GridFSBucket(db, {
       bucketName: 'tracks'
@@ -138,8 +143,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     });
     let id = uploadStream.id;
 
-    await slackUpload(readableTrackStream, id);
-
     readableTrackStream.pipe(uploadStream);
 
     uploadStream.on('error', (err) => {
@@ -149,9 +152,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     });
 
     uploadStream.on('finish', () => {
-      return res.status(201).json({
-        message: "File uploaded successfully, stored under id: " + id
-      });
+      return res.status(201).send(id);
     });
 
   } catch (e) {
@@ -225,6 +226,7 @@ app.post('/api/response', async (req, res) => {
     let userName = response.user.name;
     let timestamp = response.message.ts;
 
+    console.log(action)
     let objectID = require('mongodb').ObjectID;
     let record = {
       '_id': objectID(action.value)
@@ -239,6 +241,7 @@ app.post('/api/response', async (req, res) => {
       db.collection('tracks.files').updateOne(record, update, async (err, result) => {
 
         if (err) {
+          console.error(err)
           await slackWeb.chat.update({
             text: 'Error! Let @johnny know ASAP! And then bring him whiskey!!',
             channel: process.env.SLACK_CHANNEL,
@@ -257,11 +260,11 @@ app.post('/api/response', async (req, res) => {
         res.sendStatus(200)
 
       });
-    } else {
+    }
+    else {
       db.collection('tracks.files').deleteOne(record, async (err, result) => {
 
-        let test = true;
-        let msg = test ? 'Error! Let @johnny know ASAP! And then bring him beer!! (This audio is still not approved, don\'t worry)' : '@' + userName + ' deleted this audio.';
+        let msg = err ? 'Error! Let @johnny know ASAP! And then bring him beer!! (This audio is still not approved, don\'t worry)' : '@' + userName + ' deleted this audio.';
         let bodyObj = {
           text: msg,
           channel: process.env.SLACK_CHANNEL,
@@ -280,6 +283,8 @@ app.post('/api/response', async (req, res) => {
       });
     }
   } catch (e) {
+
+    console.error(e)
 
     return res.status(500).json({
       message: e

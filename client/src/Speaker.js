@@ -69,21 +69,21 @@ class Speaker extends Component {
         .then(buf => {
             
             console.log(buf)
-            // context.decodeAudioData(buf, (buffer) => 
-            // {
-            //     // encode AudioBuffer to WAV
-            //     var wav = audioBufferToWav(buffer)
-            //     var blob = new Blob([ new DataView(wav) ], {
-            //         type: 'audio/wav'
-            //     });
+            context.decodeAudioData(buf, (buffer) => 
+            {
+                // encode AudioBuffer to WAV
+                var wav = audioBufferToWav(buffer)
+                var blob = new Blob([ new DataView(wav) ], {
+                    type: 'audio/wav'
+                });
                 
-            //     let url = URL.createObjectURL(blob);            
+                let url = URL.createObjectURL(blob);            
                 
-            //     this.setState({
-            //         audioUrl: url
-            //     });
+                this.setState({
+                    audioUrl: url
+                });
                 
-            //   });
+              });
 
          })
         .catch(function(err){ 

@@ -140,8 +140,30 @@ class Recorder extends Component {
             method: 'post',
             body: fd
         })
+        .then((response) => {
+            return response.text()
+            .then(data => {
+                console.log('upload', typeof data);
+                this.notify(data)
+            })
+        })
+        .catch(function (err) {
+            console.log(err);
+        });
+
+    }
+
+    async notify(fileId) {
+
+        let fd = new FormData();
+        fd.append('file', this.fileBlob);
+
+        fetch('http://localhost:3001/api/upload/' + fileId, {
+            method: 'post',
+            body: fd
+        })
         .then(function (response) {
-            console.log('upload');
+            console.log('notify');
             return response;
         })
         .catch(function (err) {
