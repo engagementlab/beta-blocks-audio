@@ -1,13 +1,63 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+
+@font-face {
+  font-family: 'VG5000';
+  src: url('https://res.cloudinary.com/engagement-lab-home/raw/upload/beta-blocks/fonts/VG5000-Regular.otf') format('opentype');
+}
+@font-face {
+    font-family: 'LunchtypeMed';
+    src: url('https://res.cloudinary.com/engagement-lab-home/raw/upload/beta-blocks/fonts/lunchtype24-medium-expanded-webfont.woff2') format('woff2'),
+        /* Super modern browsers */
+        url('https://res.cloudinary.com/engagement-lab-home/raw/upload/beta-blocks/fonts/lunchtype24-medium-expanded-webfont.woff') format('woff'),
+        /* Modern browsers */
+        url('https://res.cloudinary.com/engagement-lab-home/raw/upload/beta-blocks/fonts/Lunchtype24-medium-expanded-webfont.ttf') format('truetype');
+    /* Safari, Android, iOS */
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
-    monospace;
+body {
+  font-family: 'VG5000';
+  text-align: center;
+  
+}
+
+a {
+  cursor: pointer;
+}
+
+a.yellow {
+  
+  display: inline-flex;
+  font-family: 'LunchtypeMed';
+
+  align-items: center;
+  justify-content: space-evenly;
+  
+  width: 220px;
+  height: 80px;
+    border-radius: 50px;
+
+  text-align: center;
+  text-decoration: none;
+
+  background-color: #fcbd0b;
+  border: solid 4px #fcbd0b;
+
+  /* @include transition(all, .3s, ease-in-out); */
+
+  cursor: pointer;
+}
+
+#root {
+  margin-left: auto;
+  margin-right: auto;
+  
+  max-width: 60%;
+}
+
+h1 {
+  font-weight: normal;
+  font-size: 36px;
+  letter-spacing: 7.2px;
+
+  -webkit-text-stroke: 1px #402b59;
+  color: #402b59;
 }

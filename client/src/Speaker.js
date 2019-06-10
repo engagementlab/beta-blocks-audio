@@ -21,7 +21,7 @@ class Speaker extends Component {
     async componentDidMount() {
 
         EventEmitter.subscribe('audiodone', () => {
-            setTimeout(() => this.nextTrack(), 500);
+            setTimeout(() => this.nextTrack(), 2500);
         });
 
     }

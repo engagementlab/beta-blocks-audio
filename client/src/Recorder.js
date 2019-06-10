@@ -2,25 +2,28 @@ import React, {
     Component
 } from 'react'
 import RecorderJS from 'recorderjs';
+
 import AudioPlayerDOM from './AudioPlayerDOM';
+import { EventEmitter } from './EventEmitter';
 
 class Recorder extends Component {
-
-    
+  
     constructor(props) {
         
         super(props);
         
         this.fileBlob = null;
+        this.recorder = null;
+
         this.state = {
             audioUrl: null,
             
             playnow: false,
+            playended: false,
             stream: null,
 
             recording: false,
-            recorded: false,
-            recorder: null
+            recorded: false
         };
 
     }
@@ -62,7 +65,13 @@ class Recorder extends Component {
     async componentDidMount() {
 
         let stream;
- 
+
+        EventEmitter.subscribe('audiodone', () => {
+            this.setState({
+                playended: true
+            });    
+        });
+
         try {
 
             stream = await this.getAudioStream();
@@ -86,17 +95,18 @@ class Recorder extends Component {
             stream
         } = this.state;
 
-        const audioContext = new(window.AudioContext || window.webkitAudioContext)();
-        const ctxSource = audioContext.createMediaStreamSource(stream);
+        if(!this.recorder) {
+            const audioContext = new(window.AudioContext || window.webkitAudioContext)();
+            const ctxSource = audioContext.createMediaStreamSource(stream);
 
-        const recorder = new RecorderJS(ctxSource);
+            this.recorder = new RecorderJS(ctxSource);
+        }
 
         this.setState({
-                recorder,
                 recording: true
             },
             () => {
-                recorder.record();
+                this.recorder.record();
             }
         );
 
@@ -104,12 +114,9 @@ class Recorder extends Component {
 
     stopRecord() {
         
-        const {
-            recorder
-        } = this.state;
-        recorder.stop();
+        this.recorder.stop();
 
-        recorder.exportWAV((blob) => {
+        this.recorder.exportWAV((blob) => {
 
             let url = URL.createObjectURL(blob);
             this.fileBlob = blob;
@@ -120,6 +127,27 @@ class Recorder extends Component {
             });
 
         });
+
+    }
+
+    reset() {
+     
+        this.setState({
+            
+            audioUrl: null,
+            
+            playnow: false,
+            playended: false,
+
+            stream: null,
+
+            recording: false,
+            recorded: false,
+            recorder: null
+
+        });  
+        
+        this.recorder.clear();
 
     }
 
@@ -174,28 +202,60 @@ class Recorder extends Component {
 
     render() {
 
-        const { recording, playnow } = this.state;
+        const { recording, recorded, playnow } = this.state;
 
         return (
             <div>
-                <button
+                <h1>
+                    <strong>
+                    Recall your happiest memory walking, riding or driving through future Boston.
+                    </strong>
+                    <p>
+                    Pay attention to the technology, people and places around you.
+                    </p>
+                </h1>
+
+                <a
+                hidden={recorded}
                 onClick={() => {
                     recording ? this.stopRecord() : this.startRecord();
                 }}
                 >
-                {recording ? 'Stop Recording' : 'Start Recording'}
-                </button>
-            
-                <button
-                hidden={!this.state.recorded}
-                onClick={() => { this.playStream(); }}>
-                    Play
-                </button>
-                <button
-                hidden={!this.state.recorded}
+                    <img src={recording ? "img/stop-btn.svg" : "img/rec-btn.svg"} />
+                    
+                </a>
+
+                <a
+                hidden={!recorded}
                 onClick={() => { this.upload(); }}>
-                    Upload
-                </button>
+                    <img src="img/upload-btn.svg" />
+                </a>
+
+                <p id="button" hidden={!recording}>
+                    <br />
+                    <a
+                    className="yellow"
+                    onClick={() => { this.reset(); }}>
+                        <svg width="32" height="32" fill="none" viewBox="0 0 32 32">
+                            <path stroke="#000" strokeWidth="2" d="M18.929 9l-7.071 7.071 7.07 7.071M27 16H12"/>
+                            <path stroke="#000" strokeWidth="2" d="M16 1C7.716 1 1 7.716 1 16c0 8.284 6.716 15 15 15 8.284 0 15-6.716 15-15h-4"/>
+                        </svg>
+                        Start Over
+                    </a>
+
+                    <span hidden={!recorded}>
+                        <a
+                        className="yellow"
+                        onClick={() => { this.playStream(); }}>
+                            <svg width="26" height="30" fill="none" viewBox="0 0 26 30">
+                                <path stroke="#000" strokeWidth="2" d="M23.943 15L1.02 28.235V1.765L23.943 15z"/>
+                                <path stroke="#000" stroke-width="4" d="M132 93h36v36h-36z"/>
+                            </svg>
+                            Play Back
+                        </a>
+                    </span>
+                </p>
+                
                 <AudioPlayerDOM src={this.state.audioUrl} hidden={true} playnow={playnow} />
          
             </div>
