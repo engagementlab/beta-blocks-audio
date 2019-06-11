@@ -23,6 +23,14 @@ a {
   cursor: pointer;
 }
 
+a, a img {
+  transition: transform .4s ease-in-out;
+}
+
+a:hover, a:hover img {
+  transform: scale(1.2);
+}
+
 a.yellow {
   
   display: inline-flex;
@@ -44,6 +52,10 @@ a.yellow {
   /* @include transition(all, .3s, ease-in-out); */
 
   cursor: pointer;
+}
+
+#playpause {
+  margin-left: 5%;
 }
 
 #root {
