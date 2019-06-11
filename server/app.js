@@ -185,9 +185,7 @@ app.get('/api/download/:id', (req, res) => {
 
   let downloadStream = bucket.openDownloadStream(trackId);
 
-  console.log('download')
   downloadStream.on('data', (chunk) => {
-    console.log(chunk)
     res.write(chunk);
   });
 
@@ -197,7 +195,6 @@ app.get('/api/download/:id', (req, res) => {
   });
 
   downloadStream.on('end', (data) => {
-    console.log('end', data)
     res.end();
   });
 });
@@ -226,7 +223,6 @@ app.post('/api/response', async (req, res) => {
     let userName = response.user.name;
     let timestamp = response.message.ts;
 
-    console.log(action)
     let objectID = require('mongodb').ObjectID;
     let record = {
       '_id': objectID(action.value)
@@ -262,6 +258,7 @@ app.post('/api/response', async (req, res) => {
       });
     }
     else {
+      console.log('delete ' + record)
       db.collection('tracks.files').deleteOne(record, async (err, result) => {
 
         let msg = err ? 'Error! Let @johnny know ASAP! And then bring him beer!! (This audio is still not approved, don\'t worry)' : '@' + userName + ' deleted this audio.';

@@ -70,10 +70,8 @@ class Speaker extends Component {
         fetch(this.baseUrl + '/api/download/'+id)
         .then(response => response.arrayBuffer())
         .then(buf => {
-            
-            console.log(buf)
-            context.decodeAudioData(buf, (buffer) => 
-            {
+
+            context.decodeAudioData(buf, (buffer) => {
                 // encode AudioBuffer to WAV
                 var wav = audioBufferToWav(buffer)
                 var blob = new Blob([ new DataView(wav) ], {
@@ -83,10 +81,15 @@ class Speaker extends Component {
                 let url = URL.createObjectURL(blob);            
                 
                 this.setState({
-                    audioUrl: url
+                    audioUrl: url,
+                    isStarted: true
                 });
                 
-              });
+            }, (err) => {
+                // Skip track if bad data
+                this.nextTrack();
+                console.log('Unable to decode audio for id ' + id + ', skipping.');
+            });
 
          })
         .catch(function(err){ 
@@ -113,6 +116,10 @@ class Speaker extends Component {
                             </svg>
                              <span>Start</span>
                         </a>
+                </div>
+                <div 
+                hidden={!this.state.isStarted}>
+                    <p>Refresh to restart.</p>
                 </div>
             </div>
         );

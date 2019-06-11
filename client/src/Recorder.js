@@ -18,11 +18,12 @@ class Recorder extends Component {
         this.fileBlob = null;
         this.recorder = null;
         this.recordTimer = null;
-        this.recordLimitSec = 20;
+        this.recordLimitSec = 60;
         this.recordElapsed = 0;
 
         this.state = {
             audioUrl: null,
+            allowStop: false,
             
             playnow: false,
             playended: false,
@@ -126,21 +127,25 @@ class Recorder extends Component {
                 TweenLite.to('#outer', this.recordLimitSec, {rotation:360, transformOrigin: 'center center'});
                 // Stop recording at specified limit
                 this.recordTimer = setInterval(() => {
-
+                    
                     this.recordElapsed++;
-
+                    
                     let halftime = this.recordLimitSec*.5;
                     let quartertime = this.recordLimitSec - (this.recordLimitSec*.25);
-                 
+                    
                     if((this.recordElapsed === halftime) || this.recordElapsed === quartertime) {
                         this.setState({
                             timeleft: this.recordLimitSec - this.recordElapsed
                         });
                         this.showTime(true);
                     }
-
+                    
                     if(this.recordElapsed >= this.recordLimitSec)
                         this.stopRecord();
+
+                    // Allow stop after 2s
+                    if(this.recordElapsed === 2)
+                        this.setState({ allowStop: true });
 
                 }, 1000);
 
@@ -164,6 +169,8 @@ class Recorder extends Component {
     }
 
     stopRecord() {
+
+        if(!this.state.allowStop) return;
         
         this.recorder.stop();
         clearInterval(this.recordTimer);
@@ -187,6 +194,7 @@ class Recorder extends Component {
         this.setState({
             
             audioUrl: null,
+            allowStop: false,
             
             playnow: false,
             playended: false,
@@ -201,6 +209,7 @@ class Recorder extends Component {
 
         });  
         
+        this.recordElapsed = 0;
         this.recorder.clear();
 
     }
@@ -296,7 +305,7 @@ class Recorder extends Component {
                     Thanks for your submission!
                 </h1>
 
-                <h4>You have 60 seconds for your recording.</h4>
+                <h4 hidden={recorded}>You have 60 seconds for your recording.</h4>
 
                 <div hidden={uploaded}>
                 <a

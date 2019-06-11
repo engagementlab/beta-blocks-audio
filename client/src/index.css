@@ -23,12 +23,12 @@ a {
   cursor: pointer;
 }
 
-a, a img {
+a, a img, a svg {
   transition: transform .4s ease-in-out;
 }
 
-a:hover, a:hover img {
-  transform: scale(1.2);
+a:hover, a:hover img, a:hover svg {
+  transform: scale(1.1);
 }
 
 a.yellow {
