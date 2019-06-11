@@ -202,7 +202,7 @@ app.get('/api/download/:id', (req, res) => {
 
 app.get('/api/list', (req, res) => {
 
-  db.collection('tracks.files', {'metadata.approved': true}).find({}, {
+  db.collection('tracks.files').find({'metadata.approved': true}, {
     _id: 1
   }).toArray(function (err, result) {
 
@@ -215,7 +215,6 @@ app.get('/api/list', (req, res) => {
 });
 
 app.post('/api/response', async (req, res) => {
-
 
   try {
 
