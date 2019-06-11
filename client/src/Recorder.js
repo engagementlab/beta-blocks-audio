@@ -1,7 +1,9 @@
 import React, {
     Component
 } from 'react'
+
 import RecorderJS from 'recorderjs';
+import { TweenLite } from 'gsap';
 
 import AudioPlayerDOM from './AudioPlayerDOM';
 import { EventEmitter } from './EventEmitter';
@@ -14,16 +16,20 @@ class Recorder extends Component {
         
         this.fileBlob = null;
         this.recorder = null;
+        this.recordLimitSec = 20;
+        this.recordElapsed = 0;
 
         this.state = {
             audioUrl: null,
             
             playnow: false,
             playended: false,
-            stream: null,
-
+            
             recording: false,
-            recorded: false
+            recorded: false,
+
+            stream: null,
+            timeleft: 0,
         };
 
     }
@@ -66,9 +72,16 @@ class Recorder extends Component {
 
         let stream;
 
+        EventEmitter.subscribe('audiostart', () => {
+            this.setState({
+                playended: false
+            });    
+        });
+
         EventEmitter.subscribe('audiodone', () => {
             this.setState({
-                playended: true
+                playended: true,
+                playnow: false
             });    
         });
 
@@ -106,9 +119,44 @@ class Recorder extends Component {
                 recording: true
             },
             () => {
+                // Stop recording at specified limit
+                let limiter = setInterval(() => {
+
+                    this.recordElapsed++;
+
+                    let halftime =  (this.recordLimitSec / 2);
+                    let quartertime =  (this.recordLimitSec / 4);
+                 
+                    if((this.recordElapsed == halftime) || this.recordElapsed == quartertime) {
+                        this.setState({
+                            timeleft: this.recordLimitSec - this.recordElapsed
+                        });
+                        this.showTime();
+                    }
+
+                    if(this.recordElapsed >= this.recordLimitSec) {                        
+                        clearInterval(limiter);
+                        this.stopRecord();
+                    }
+
+                }, 1000);
+
+                // Start recording 
                 this.recorder.record();
             }
         );
+
+    }
+
+    showTime() {
+    
+        TweenLite.fromTo(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0}, {y: '0%', autoAlpha: 1, visibility: 'visible'});
+
+        setTimeout(() => {
+
+            TweenLite.to(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0, visibility: 'hidden'});
+
+        }, 4500);
 
     }
 
@@ -151,10 +199,10 @@ class Recorder extends Component {
 
     }
 
-    async playStream() {
+    async playStopStream() {
 
         this.setState({
-            playnow: true
+            playnow: !this.state.playnow
         });
 
     }
@@ -202,7 +250,7 @@ class Recorder extends Component {
 
     render() {
 
-        const { recording, recorded, playnow } = this.state;
+        const { recording, recorded, playnow, playended, timeleft } = this.state;
 
         return (
             <div>
@@ -231,13 +279,17 @@ class Recorder extends Component {
                     <img src="img/upload-btn.svg" />
                 </a>
 
+                <div id="time" style={{visibility: 'hidden'}}>
+                    {timeleft} seconds left.
+                </div>
+
                 <p id="button" hidden={!recording}>
                     <br />
                     <a
                     className="yellow"
                     onClick={() => { this.reset(); }}>
                         <svg width="32" height="32" fill="none" viewBox="0 0 32 32">
-                            <path stroke="#000" strokeWidth="2" d="M18.929 9l-7.071 7.071 7.07 7.071M27 16H12"/>
+                            <path  stroke="#000" strokeWidth="2" d="M18.929 9l-7.071 7.071 7.07 7.071M27 16H12"/>
                             <path stroke="#000" strokeWidth="2" d="M16 1C7.716 1 1 7.716 1 16c0 8.284 6.716 15 15 15 8.284 0 15-6.716 15-15h-4"/>
                         </svg>
                         Start Over
@@ -246,12 +298,17 @@ class Recorder extends Component {
                     <span hidden={!recorded}>
                         <a
                         className="yellow"
-                        onClick={() => { this.playStream(); }}>
+                        onClick={() => { this.playStopStream(); }}>
                             <svg width="26" height="30" fill="none" viewBox="0 0 26 30">
-                                <path stroke="#000" strokeWidth="2" d="M23.943 15L1.02 28.235V1.765L23.943 15z"/>
-                                <path stroke="#000" stroke-width="4" d="M132 93h36v36h-36z"/>
+                                
+                            {(playnow && !playended) ? 
+                            <path stroke="#000" strokeWidth="4" d="M 0.831 3.177 L 25.207 3.177 L 25.207 25.572 L 0.831 25.572 Z"></path>
+                            : 
+                            <path stroke="#000" strokeWidth="2" d="M 24.997 15 L 1.02 28.235 L 1.02 1.765 L 24.997 15"></path>
+                            }
+                                
                             </svg>
-                            Play Back
+                            {(playnow && !playended) ? <span>Stop</span> : <span>Play Back</span>}
                         </a>
                     </span>
                 </p>

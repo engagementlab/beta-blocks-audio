@@ -20,6 +20,7 @@ export default class AudioPlayerDOM extends Component {
     const audio = element.querySelector('audio');
 
     audio.onended = () => this.audioDone();
+    audio.onplay = () => this.audioStart();
 
   }
 
@@ -39,10 +40,16 @@ export default class AudioPlayerDOM extends Component {
     }
 
     // When playnow prop true, play audio
-    if ((nextProps.playnow) && (nextProps.playnow !== this.props.playnow)) {
+    if (nextProps.playnow !== undefined) {
       // Cause the audio element to play
-      audio.play();
+      nextProps.playnow ? audio.play() : audio.pause();
     }
+
+  }
+
+  audioStart() {
+
+    EventEmitter.dispatch('audiostart', null);
 
   }
 
