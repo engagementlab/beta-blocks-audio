@@ -108,7 +108,8 @@ const slackUpload = async (stream, fileId) => {
               "text": "Delete",
               "emoji": false
             },
-            "style": "danger"
+            "style": "danger",
+            "value": fileId
           }
         ]
       }
