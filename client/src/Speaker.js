@@ -9,6 +9,9 @@ class Speaker extends Component {
     
     constructor(props){
         super(props) 
+
+        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : this.baseUrl + '';
+
         this.state = {
             isStarted: false,
             audioUrl: null,
@@ -28,7 +31,7 @@ class Speaker extends Component {
 
     updatePlaylist(callback) {
 
-        fetch('http://localhost:3001/api/list')
+        fetch(this.baseUrl + '/api/list')
         .then((response) => { return response.json() })
         .then((data) => { this.trackIds = data; this.startStreaming(); })
         .catch(function(err){ 
@@ -64,7 +67,7 @@ class Speaker extends Component {
 
         var context = new AudioContext();
         
-        fetch('http://localhost:3001/api/download/'+id)
+        fetch(this.baseUrl + '/api/download/'+id)
         .then(response => response.arrayBuffer())
         .then(buf => {
             

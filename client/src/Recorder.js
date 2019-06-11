@@ -13,6 +13,7 @@ class Recorder extends Component {
     constructor(props) {
         
         super(props);
+        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : this.baseUrl + '';
         
         this.fileBlob = null;
         this.recorder = null;
@@ -131,7 +132,7 @@ class Recorder extends Component {
                     let halftime = this.recordLimitSec*.5;
                     let quartertime = this.recordLimitSec - (this.recordLimitSec*.25);
                  
-                    if((this.recordElapsed == halftime) || this.recordElapsed == quartertime) {
+                    if((this.recordElapsed === halftime) || this.recordElapsed === quartertime) {
                         this.setState({
                             timeleft: this.recordLimitSec - this.recordElapsed
                         });
@@ -220,7 +221,7 @@ class Recorder extends Component {
         let fd = new FormData();
         fd.append('file', this.fileBlob);
 
-        fetch('http://localhost:3001/api/upload', {
+        fetch(this.baseUrl + '/api/upload', {
             method: 'post',
             body: fd
         })
@@ -243,7 +244,7 @@ class Recorder extends Component {
         let fd = new FormData();
         fd.append('file', this.fileBlob);
 
-        fetch('http://localhost:3001/api/upload/' + fileId, {
+        fetch(this.baseUrl + '/api/upload/' + fileId, {
             method: 'post',
             body: fd
         })
@@ -260,7 +261,7 @@ class Recorder extends Component {
                 this.setState({
                     timeleft: newTime
                 });
-                if(this.state.timeleft == 0) {                   
+                if(this.state.timeleft === 0) {
                     clearInterval(resetTimer);
                     TweenLite.to(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0, visibility: 'hidden'}); 
                     this.reset();
