@@ -10,7 +10,7 @@ class Speaker extends Component {
     constructor(props){
         super(props) 
 
-        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : this.baseUrl + '';
+        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
 
         this.state = {
             isStarted: false,
@@ -104,10 +104,15 @@ class Speaker extends Component {
                 
                 <div 
                 hidden={this.state.isStarted}>
-                    <button
-                    onClick={() => { this.updatePlaylist(); }}>
-                        Start Stream
-                    </button>
+                    <a
+                        id="playpause"
+                        className="yellow" 
+                        onClick={() => { this.updatePlaylist(); }}>
+                            <svg width="26" height="30" fill="none" viewBox="0 0 26 30">
+                                <path stroke="#000" strokeWidth="2" d="M 24.997 15 L 1.02 28.235 L 1.02 1.765 L 24.997 15"></path>
+                            </svg>
+                             <span>Start</span>
+                        </a>
                 </div>
             </div>
         );

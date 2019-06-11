@@ -13,7 +13,7 @@ class Recorder extends Component {
     constructor(props) {
         
         super(props);
-        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : this.baseUrl + '';
+        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
         
         this.fileBlob = null;
         this.recorder = null;
