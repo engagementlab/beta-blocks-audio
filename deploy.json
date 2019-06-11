@@ -1,0 +1,36 @@
+{
+  "apps" : [
+    {
+      "name": "beta-blocks-audio-server",
+      "script": "app.js",      
+      "exec_interpreter": "/home/node/.nvm/versions/node/v10.15.3/bin/node",
+      "env_production": {
+        "NODE_ENV": "production"
+      },
+      "env_staging": {
+        "NODE_ENV": "staging"
+      }
+    },
+    {
+      "name": "beta-blocks-audio-client",      
+      "exec_interpreter": "/home/node/.nvm/versions/node/v10.15.3/bin/node",
+      "script": "/home/node/.nvm/versions/node/v10.15.3/bin/http-server",
+      "args": "/srv/beta-blocks-audio/source/client/dist -p 8082"
+    }],
+  "deploy" : {
+
+    "production" : {
+      "user": "node",
+      "host": "68.183.153.228",
+      "repo": "git@github.com:engagementlab/beta-blocks-audio.git",
+      "ref": "origin/master",
+      "path": "/srv/beta-blocks-audio",
+      "pre-deploy-local" : "echo 'Cloning and building.';",
+      "post-deploy" : "bash deploy.sh prod",
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+
+  }
+}
