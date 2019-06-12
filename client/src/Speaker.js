@@ -103,6 +103,10 @@ class Speaker extends Component {
             <div>
                 <div hidden={!this.state.isStarted}>
                     <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
+                    
+                    <audio loop={true} autoPlay={true}>
+                        <source src="backing.mp3" />
+                    </audio>
                 </div>
                 
                 <div 
