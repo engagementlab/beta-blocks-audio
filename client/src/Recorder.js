@@ -222,7 +222,7 @@ class Recorder extends Component {
                 }, 1000);
 
                 // Start recording 
-                // this.recorder.record();
+                this.recorder.record();
 
             }
         );
