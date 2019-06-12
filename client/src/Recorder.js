@@ -135,7 +135,7 @@ class Recorder extends Component {
         // to the previous sample - take the max here because we
         // want "fast attack, slow release."
         let volume = Math.max(rms, this.volume*this.averaging);
-        let scaleFactor = (1.1*volume*10);
+        let scaleFactor = (1.1*volume*5.5);
         if(scaleFactor < 1) scaleFactor = 1;
         
         document.getElementById('stopimg').style.transform = 'scale(' + scaleFactor + ')';
