@@ -65,6 +65,11 @@ a.yellow {
   max-width: 60%;
 }
 
+#stopimg {
+  display: inline-block;
+  transform-origin: center center;
+}
+
 h1 {
   font-weight: normal;
   font-size: 36px;
