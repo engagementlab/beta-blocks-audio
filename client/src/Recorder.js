@@ -284,6 +284,7 @@ class Recorder extends Component {
         });  
         
         this.recordElapsed = 0;
+        this.recordLimitSec = 60;
         this.recorder.clear();
 
     }
