@@ -5,6 +5,8 @@ import { EventEmitter } from './EventEmitter';
 
 import audioBufferToWav from 'audiobuffer-to-wav';
 
+import backingTrack from './backing.mp3';
+
 class Speaker extends Component {
     
     constructor(props){
@@ -66,6 +68,7 @@ class Speaker extends Component {
         if(!id) return;
 
         var context = new AudioContext();
+        document.getElementById('backing').play();
         
         fetch(this.baseUrl + '/api/download/'+id)
         .then(response => response.arrayBuffer())
@@ -104,8 +107,8 @@ class Speaker extends Component {
                 <div hidden={!this.state.isStarted}>
                     <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
                     
-                    <audio loop={true} autoPlay={true}>
-                        <source src="backing.mp3" />
+                    <audio id="backing" loop={true}>
+                        <source src={backingTrack} />
                     </audio>
                 </div>
                 

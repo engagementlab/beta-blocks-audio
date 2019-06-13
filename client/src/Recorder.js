@@ -138,7 +138,8 @@ class Recorder extends Component {
         let scaleFactor = (1.1*volume*5.5);
         if(scaleFactor < 1) scaleFactor = 1;
         
-        document.getElementById('stopimg').style.transform = 'scale(' + scaleFactor + ')';
+        let stop = document.getElementById('stopimg');
+        if(stop) stop.style.transform = 'scale(' + scaleFactor + ')';
 
     }
 
