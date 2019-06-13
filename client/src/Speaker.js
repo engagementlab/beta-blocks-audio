@@ -12,6 +12,7 @@ class Speaker extends Component {
     constructor(props){
         super(props) 
 
+        this.soundPlayer = null;
         this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
 
         this.state = {
@@ -20,7 +21,9 @@ class Speaker extends Component {
             playlist: null,
             trackIds: [],
             trackIndex: 0
-        };        
+        }; 
+        
+        this.soundPlayer = new Audio(backingTrack);
     }
 
     async componentDidMount() {
@@ -28,10 +31,10 @@ class Speaker extends Component {
         EventEmitter.subscribe('audiodone', () => {
             setTimeout(() => this.nextTrack(), 2500);
         });
-
     }
 
     updatePlaylist(callback) {
+        this.soundPlayer.play();       
 
         fetch(this.baseUrl + '/api/list')
         .then((response) => { return response.json() })
@@ -68,7 +71,6 @@ class Speaker extends Component {
         if(!id) return;
 
         var context = new AudioContext();
-        document.getElementById('backing').play();
         
         fetch(this.baseUrl + '/api/download/'+id)
         .then(response => response.arrayBuffer())
@@ -107,9 +109,9 @@ class Speaker extends Component {
                 <div hidden={!this.state.isStarted}>
                     <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
                     
-                    <audio id="backing" loop={true}>
+                    {/* <audio id="backing" loop={true}>
                         <source src={backingTrack} />
-                    </audio>
+                    </audio> */}
                 </div>
                 
                 <div 
