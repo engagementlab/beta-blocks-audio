@@ -19,7 +19,7 @@ body {
   
 }
 
-a {
+a:not(.disabled) {
   cursor: pointer;
 }
 
@@ -27,7 +27,7 @@ a, a img, a svg {
   transition: transform .4s ease-in-out;
 }
 
-a:hover, a:hover img, a:hover svg {
+a:hover, a:hover img, a:not(.disabled):hover svg {
   transform: scale(1.1);
 }
 
