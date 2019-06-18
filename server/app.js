@@ -129,7 +129,7 @@ app.post('/api/upload/:file_id?', upload.single('file'), async (req, res) => {
     readableTrackStream.push(null);
 
     if(req.params.file_id) {
-      await slackUpload(readableTrackStream, req.params.file_id.replace(/"/g, ''));
+      // await slackUpload(readableTrackStream, req.params.file_id.replace(/"/g, ''));
       return res.status(200).send('done');
     }
 

@@ -17,6 +17,7 @@ class Recorder extends Component {
         
         this.audioContext = null;
         this.fileBlob = null;
+        this.localDb = null;
         this.micSrc = null;
         this.recorder = null;
         this.recordTimer = null;
@@ -47,6 +48,15 @@ class Recorder extends Component {
     async componentDidMount() {
 
         let stream;
+
+        var DBOpenRequest = window.indexedDB.open("audio");
+        DBOpenRequest.onsuccess = function(e) {
+          this.localDb = DBOpenRequest.result;
+          
+        };
+        DBOpenRequest.onupgradeneeded = function (event) {
+            this.localDb.createObjectStore("files");
+          };
 
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
@@ -309,6 +319,10 @@ class Recorder extends Component {
 
         let fd = new FormData();
         fd.append('file', this.fileBlob);
+
+        // Local save
+        let localTrans = this.localDb.transaction(["files"], IDBTransaction.READ_WRITE);
+        localTrans.objectStore("files").put(this.fileBlob, "0010");
 
         fetch(this.baseUrl + '/api/upload', {
             method: 'post',
