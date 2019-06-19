@@ -3,18 +3,25 @@ import React, {
 } from 'react'
 
 import RecorderJS from 'recorderjs';
-import { TweenLite, TweenMax, Linear } from 'gsap';
+import {
+    TweenLite,
+    TweenMax,
+    Linear
+} from 'gsap';
 
 import AudioPlayerDOM from './AudioPlayerDOM';
-import { EventEmitter } from './EventEmitter';
+import {
+    EventEmitter
+} from './EventEmitter';
+import audioBufferToWav from 'audiobuffer-to-wav';
 
 class Recorder extends Component {
-  
+
     constructor(props) {
-        
+
         super(props);
         this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
-        
+
         this.audioContext = null;
         this.fileBlob = null;
         this.localDb = null;
@@ -24,17 +31,17 @@ class Recorder extends Component {
         this.recordLimitSec = 60;
         this.recordElapsed = 0;
 
-        
+
         this.state = {
             audioUrl: null,
             allowStop: false,
-            
+
             playnow: false,
             playended: false,
-            
+
             recording: false,
             recorded: false,
-            
+
             stream: null,
             scaleRecord: 0,
             timeleft: 0,
@@ -47,30 +54,20 @@ class Recorder extends Component {
 
     async componentDidMount() {
 
-        let stream;
-
-        var DBOpenRequest = window.indexedDB.open("audio");
-        DBOpenRequest.onsuccess = function(e) {
-          this.localDb = DBOpenRequest.result;
-          
-        };
-        DBOpenRequest.onupgradeneeded = function (event) {
-            this.localDb.createObjectStore("files");
-          };
-
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
                 playended: false
-            });    
+            });
         });
 
         EventEmitter.subscribe('audiodone', () => {
             this.setState({
                 playended: true,
                 playnow: false
-            });    
+            });
         });
 
+        let stream;
         try {
 
             stream = await this.getAudioStream();
@@ -82,10 +79,38 @@ class Recorder extends Component {
 
         }
 
+        // Create local indexdb for fallback saves
+        this.initLocalDb();
+
         this.setState({
             stream
         });
 
+    }
+
+    initLocalDb() {
+
+        let req = indexedDB.open('audio');
+        req.onerror = function (event) {
+            
+            console.error('Unable to open local DB', event);
+
+        };
+        req.onsuccess = (event) => {
+            
+            this.localDb = event.target.result;
+
+        };
+        req.onupgradeneeded = function (event) {
+
+            // Save the IDBDatabase interface 
+            this.localDb = event.target.result;
+
+            // Create an objectStore for this database
+            let store = this.localDb.createObjectStore('files', { keyPath: 'id', autoIncrement:true });
+            store.createIndex('datetime', 'datetime', { unique: true });
+
+        };
     }
 
     getAudioStream() {
@@ -123,34 +148,34 @@ class Recorder extends Component {
     }
 
     // Adopted from https://github.com/cwilso/volume-meter
-    volumeAudioProcess( event ) {
+    volumeAudioProcess(event) {
         var buf = event.inputBuffer.getChannelData(0);
         var bufLength = buf.length;
         var sum = 0;
         var x;
-        
+
         // Do a root-mean-square on the samples: sum up the squares...
-        for (var i=0; i<bufLength; i++) {
+        for (var i = 0; i < bufLength; i++) {
             x = buf[i];
-            if (Math.abs(x)>=this.clipLevel) {
+            if (Math.abs(x) >= this.clipLevel) {
                 this.clipping = true;
                 this.lastClip = window.performance.now();
             }
             sum += x * x;
         }
-    
+
         // ... then take the square root of the sum.
-        var rms =  Math.sqrt(sum / bufLength);
-   
+        var rms = Math.sqrt(sum / bufLength);
+
         // Now smooth this out with the averaging factor applied
         // to the previous sample - take the max here because we
         // want "fast attack, slow release."
-        let volume = Math.max(rms, this.volume*this.averaging);
-        let scaleFactor = (1.1*volume*5.5);
-        if(scaleFactor < 1) scaleFactor = 1;
-        
+        let volume = Math.max(rms, this.volume * this.averaging);
+        let scaleFactor = (1.1 * volume * 5.5);
+        if (scaleFactor < 1) scaleFactor = 1;
+
         let stop = document.getElementById('stopimg');
-        if(stop) stop.style.transform = 'scale(' + scaleFactor + ')';
+        if (stop) stop.style.transform = 'scale(' + scaleFactor + ')';
 
     }
 
@@ -164,38 +189,38 @@ class Recorder extends Component {
         processor.averaging = 0.95;
         processor.clipLevel = 0.98;
         processor.clipLag = 750;
-    
+
         // this will have no effect, since we don't copy the input to the output,
         // but works around a current Chrome bug.
         processor.connect(audioContext.destination);
 
         this.micSrc.connect(processor);
-    
+
         processor.checkClipping =
-            function(){
+            function () {
                 if (!this.clipping)
                     return false;
                 if ((this.lastClip + this.clipLag) < window.performance.now())
                     this.clipping = false;
                 return this.clipping;
             };
-    
+
         processor.shutdown =
-            function(){
+            function () {
                 this.disconnect();
                 this.onaudioprocess = null;
             };
-    
+
         return processor;
     }
 
     startRecord() {
-        
+
         const {
             stream
         } = this.state;
 
-        if(!this.recorder) {
+        if (!this.recorder) {
             this.audioContext = new(window.AudioContext || window.webkitAudioContext)();
             this.micSrc = this.audioContext.createMediaStreamSource(stream);
 
@@ -208,28 +233,33 @@ class Recorder extends Component {
                 recording: true
             },
             () => {
-                TweenLite.to('#outer', this.recordLimitSec, {rotation:360, transformOrigin: 'center center'});
+                TweenLite.to('#outer', this.recordLimitSec, {
+                    rotation: 360,
+                    transformOrigin: 'center center'
+                });
                 // Stop recording at specified limit
                 this.recordTimer = setInterval(() => {
-                    
+
                     this.recordElapsed++;
-                    
-                    let halftime = this.recordLimitSec*.5;
-                    let quartertime = this.recordLimitSec - (this.recordLimitSec*.25);
-                    
-                    if((this.recordElapsed === halftime) || this.recordElapsed === quartertime) {
+
+                    let halftime = this.recordLimitSec * .5;
+                    let quartertime = this.recordLimitSec - (this.recordLimitSec * .25);
+
+                    if ((this.recordElapsed === halftime) || this.recordElapsed === quartertime) {
                         this.setState({
                             timeleft: this.recordLimitSec - this.recordElapsed
                         });
                         this.showTime(true);
                     }
-                    
-                    if(this.recordElapsed >= this.recordLimitSec)
+
+                    if (this.recordElapsed >= this.recordLimitSec)
                         this.stopRecord();
 
                     // Allow stop after 2s
-                    if(this.recordElapsed === 2)
-                        this.setState({ allowStop: true });
+                    if (this.recordElapsed === 2)
+                        this.setState({
+                            allowStop: true
+                        });
 
                 }, 1000);
 
@@ -242,12 +272,23 @@ class Recorder extends Component {
     }
 
     showTime(autoHide) {
-    
-        TweenLite.fromTo(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0}, {y: '0%', autoAlpha: 1, visibility: 'visible'});
 
-        if(autoHide) {
+        TweenLite.fromTo(document.getElementById('time'), 1, {
+            y: '100%',
+            autoAlpha: 0
+        }, {
+            y: '0%',
+            autoAlpha: 1,
+            visibility: 'visible'
+        });
+
+        if (autoHide) {
             setTimeout(() => {
-                TweenLite.to(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0, visibility: 'hidden'});
+                TweenLite.to(document.getElementById('time'), 1, {
+                    y: '100%',
+                    autoAlpha: 0,
+                    visibility: 'hidden'
+                });
             }, 2500);
         }
 
@@ -255,32 +296,57 @@ class Recorder extends Component {
 
     stopRecord() {
 
-        if(!this.state.allowStop) return;
-        
+        if (!this.state.allowStop) return;
+
         this.recorder.stop();
         clearInterval(this.recordTimer);
 
         this.recorder.exportWAV((blob) => {
 
-            let url = URL.createObjectURL(blob);
+            // let url = URL.createObjectURL(blob);
             this.fileBlob = blob;
 
-            this.setState({
-                audioUrl: url,
-                recorded: true
-            });
+            // Local save
+            let transactionReq = this.localDb.transaction(['files'], 'readwrite')
+                                 .objectStore('files')
+                                 .add({file: this.fileBlob, datetime: Date.now()});
+
+            transactionReq.onsuccess = (e) => {
+                let getReq = this.localDb.transaction(['files']).objectStore('files').getAll();
+                getReq.onsuccess = (event) => {
+                    if (getReq.result) {
+
+                        console.log(getReq.result)
+                        
+                        // let url = URL.createObjectURL(getReq.result);     
+                        // this.setState({
+                        //     audioUrl: url,
+                        //     recorded: true
+                        // });
+                    // });
+                        } else {
+                        console.log('No data record');
+                        }
+                };
+
+                getReq.onerror = function(err) {
+                    console.error(err)
+                }
+
+            };
+
 
         });
 
     }
 
     reset() {
-     
+
         this.setState({
-            
+
             audioUrl: null,
             allowStop: false,
-            
+
             playnow: false,
             playended: false,
 
@@ -293,8 +359,8 @@ class Recorder extends Component {
             uploaded: false,
             uploading: false
 
-        });  
-        
+        });
+
         this.recordElapsed = 0;
         this.recordLimitSec = 60;
         this.recorder.clear();
@@ -311,36 +377,39 @@ class Recorder extends Component {
 
     async upload() {
 
-        if(this.state.uploading) return;
+        if (this.state.uploading) return;
 
         // Animate to show work...
-        let spin = TweenMax.to('#outer-upload', 3, {rotation:360, ease:Linear.easeNone, transformOrigin: 'center center', repeat: -1});
-        this.setState({uploading: true});
+        let spin = TweenMax.to('#outer-upload', 3, {
+            rotation: 360,
+            ease: Linear.easeNone,
+            transformOrigin: 'center center',
+            repeat: -1
+        });
+        this.setState({
+            uploading: true
+        });
 
         let fd = new FormData();
         fd.append('file', this.fileBlob);
 
-        // Local save
-        let localTrans = this.localDb.transaction(["files"], IDBTransaction.READ_WRITE);
-        localTrans.objectStore("files").put(this.fileBlob, "0010");
-
         fetch(this.baseUrl + '/api/upload', {
-            method: 'post',
-            body: fd
-        })
-        .then((response) => {
-            return response.text()
-            .then(data => {
-                // TODO: This is pretty hacky
-                // Take mongo object id response and send back to notify endpoint
-                this.notify(data);
-                spin.kill();
+                method: 'post',
+                body: fd
             })
-        })
-        .catch(function (err) {
-            console.log(err);
-            spin.kill();
-        });
+            .then((response) => {
+                return response.text()
+                    .then(data => {
+                        // TODO: This is pretty hacky
+                        // Take mongo object id response and send back to notify endpoint
+                        this.notify(data);
+                        spin.kill();
+                    })
+            })
+            .catch(function (err) {
+                console.log(err);
+                spin.kill();
+            });
 
     }
 
@@ -350,35 +419,39 @@ class Recorder extends Component {
         fd.append('file', this.fileBlob);
 
         fetch(this.baseUrl + '/api/upload/' + fileId, {
-            method: 'post',
-            body: fd
-        })
-        .then((response) => {
+                method: 'post',
+                body: fd
+            })
+            .then((response) => {
 
-            // Flow finished, reset state in 10 seconds
-            this.setState({
-                uploaded: true,
-                timeleft: 5
-            });
-            
-            let resetTimer = setInterval(() => {
-                let newTime = this.state.timeleft-1;
+                // Flow finished, reset state in 10 seconds
                 this.setState({
-                    timeleft: newTime
+                    uploaded: true,
+                    timeleft: 5
                 });
-                if(this.state.timeleft === 0) {
-                    clearInterval(resetTimer);
-                    TweenLite.to(document.getElementById('time'), 1, {y: '100%', autoAlpha: 0, visibility: 'hidden'}); 
-                    this.reset();
-                }
-            }, 1000);
-            this.showTime();
 
-            return response;
-        })
-        .catch(function (err) {
-            console.log(err);
-        });
+                let resetTimer = setInterval(() => {
+                    let newTime = this.state.timeleft - 1;
+                    this.setState({
+                        timeleft: newTime
+                    });
+                    if (this.state.timeleft === 0) {
+                        clearInterval(resetTimer);
+                        TweenLite.to(document.getElementById('time'), 1, {
+                            y: '100%',
+                            autoAlpha: 0,
+                            visibility: 'hidden'
+                        });
+                        this.reset();
+                    }
+                }, 1000);
+                this.showTime();
+
+                return response;
+            })
+            .catch(function (err) {
+                console.log(err);
+            });
 
     }
 
