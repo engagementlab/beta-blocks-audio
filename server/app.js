@@ -10,6 +10,7 @@ var multer = require('multer');
 var app = express();
 
 const mongodb = require('mongodb');
+const GridStream = require('gridfs-stream');
 const MongoClient = require('mongodb').MongoClient;
 const ObjectID = require('mongodb').ObjectID,
   dateFormat = require('dateformat');
@@ -53,12 +54,14 @@ app.all('/*', function (req, res, next) {
  * Connect Mongo Driver to MongoDB.
  */
 let db;
+let gfs;
 MongoClient.connect('mongodb://localhost/beta-blocks-audio', (err, database) => {
   if (err) {
     console.log('MongoDB Connection Error. Please make sure that MongoDB is running.');
     process.exit(1);
   }
   db = database;
+  gfs = GridStream(db, mongodb);
 });
 
 var memory = multer.memoryStorage();
@@ -119,7 +122,7 @@ const slackUpload = async (stream, fileId) => {
   return result.file.url_private;
 };
 
-app.post('/api/upload/:file_id?', upload.single('file'), async (req, res) => {
+app.post('/api/upload', upload.single('file'), async (req, res) => {
 
   try {
 
@@ -127,11 +130,6 @@ app.post('/api/upload/:file_id?', upload.single('file'), async (req, res) => {
     const readableTrackStream = new Readable();
     readableTrackStream.push(req.file.buffer);
     readableTrackStream.push(null);
-
-    if(req.params.file_id) {
-      // await slackUpload(readableTrackStream, req.params.file_id.replace(/"/g, ''));
-      return res.status(200).send('done');
-    }
 
     let bucket = new mongodb.GridFSBucket(db, {
       bucketName: 'tracks'
@@ -165,6 +163,34 @@ app.post('/api/upload/:file_id?', upload.single('file'), async (req, res) => {
   }
 
 });
+
+app.post('/api/notify/:file_id?', async (req, res) => {
+    // Pull track and upload to slack
+      
+      try {
+        var trackId = new ObjectID(req.params.file_id);
+      } catch (err) {
+        return res.status(400).json({
+          message: 'Invalid trackId in URL parameter.'
+        });
+      }
+      
+      var read_stream = gfs.createReadStream({_id: trackId});
+      let file = [];
+      read_stream.on('data', function (chunk) {
+          file.push(chunk);
+      });
+      read_stream.on('error', e => {
+          console.log(e);
+          reject(e);
+      });
+      read_stream.on('end', function () {
+          console.log(file)
+          file = Buffer.concat(file);
+          // await slackUpload(data, req.params.file_id.replace(/"/g, ''));
+      });
+
+  });
 
 // Thanks: https://medium.com/@richard534/uploading-streaming-audio-using-nodejs-express-mongodb-gridfs-b031a0bcb20f
 app.get('/api/download/:id', (req, res) => {

@@ -13,7 +13,6 @@ import AudioPlayerDOM from './AudioPlayerDOM';
 import {
     EventEmitter
 } from './EventEmitter';
-import audioBufferToWav from 'audiobuffer-to-wav';
 
 class Recorder extends Component {
 
@@ -271,6 +270,40 @@ class Recorder extends Component {
 
     }
 
+    stopRecord() {
+
+        if (!this.state.allowStop) return;
+
+        this.recorder.stop();
+        clearInterval(this.recordTimer);
+
+        this.recorder.exportWAV((blob) => {
+
+            let url = URL.createObjectURL(blob);
+            this.fileBlob = blob;
+
+            // Local save
+            let transactionReq = this.localDb.transaction(['files'], 'readwrite')
+                                 .objectStore('files')
+                                 .add({file: this.fileBlob, datetime: Date.now()});
+
+            transactionReq.onsuccess = function(e) {
+              console.log('File saved to disk', e.result);
+            };
+
+            transactionReq.onerror = function(err) {
+                console.error('File save failed', err);
+              };
+        
+            this.setState({
+                audioUrl: url,
+                recorded: true
+            });
+        
+        });
+
+    }
+
     showTime(autoHide) {
 
         TweenLite.fromTo(document.getElementById('time'), 1, {
@@ -294,50 +327,39 @@ class Recorder extends Component {
 
     }
 
-    stopRecord() {
+    uploadBackups() {
 
-        if (!this.state.allowStop) return;
+        let getAllFiles = this.localDb.transaction(['files']).objectStore('files').getAll();
+        getAllFiles.onsuccess = () => {
+            if (getAllFiles.result) {
 
-        this.recorder.stop();
-        clearInterval(this.recordTimer);
+                let promisesUpload = [];
+                let promisesNotify = [];
 
-        this.recorder.exportWAV((blob) => {
+                for(let i in getAllFiles.result) {
 
-            // let url = URL.createObjectURL(blob);
-            this.fileBlob = blob;
+                    let record = getAllFiles.result[i];
+                    let blob = record.file;
 
-            // Local save
-            let transactionReq = this.localDb.transaction(['files'], 'readwrite')
-                                 .objectStore('files')
-                                 .add({file: this.fileBlob, datetime: Date.now()});
 
-            transactionReq.onsuccess = (e) => {
-                let getReq = this.localDb.transaction(['files']).objectStore('files').getAll();
-                getReq.onsuccess = (event) => {
-                    if (getReq.result) {
-
-                        console.log(getReq.result)
-                        
-                        // let url = URL.createObjectURL(getReq.result);     
-                        // this.setState({
-                        //     audioUrl: url,
-                        //     recorded: true
-                        // });
-                    // });
-                        } else {
-                        console.log('No data record');
-                        }
-                };
-
-                getReq.onerror = function(err) {
-                    console.error(err)
+                    promisesUpload.push(new Promise(resolve => this.upload(blob, resolve)));
+                    
                 }
+                
+                Promise.all(promisesUpload).then((fileIds) => {
+                    Promise.all(fileIds.map((val) => {
+                        return new Promise(resolve => this.notify(val, resolve));
+                    }));
+                });
+                
+                } 
+                else
+                    console.log('No data record');
+        };
 
-            };
-
-
-        });
-
+        getAllFiles.onerror = function(err) {
+            console.error('Unable to get local files', err);
+        }
     }
 
     reset() {
@@ -375,9 +397,9 @@ class Recorder extends Component {
 
     }
 
-    async upload() {
+    upload(customData, resolve) {
 
-        if (this.state.uploading) return;
+        // if (this.state.uploading) return;
 
         // Animate to show work...
         let spin = TweenMax.to('#outer-upload', 3, {
@@ -391,7 +413,7 @@ class Recorder extends Component {
         });
 
         let fd = new FormData();
-        fd.append('file', this.fileBlob);
+        fd.append('file', customData ? customData : this.fileBlob);
 
         fetch(this.baseUrl + '/api/upload', {
                 method: 'post',
@@ -399,13 +421,16 @@ class Recorder extends Component {
             })
             .then((response) => {
                 return response.text()
-                    .then(data => {
-                        // TODO: This is pretty hacky
-                        // Take mongo object id response and send back to notify endpoint
-                        this.notify(data);
-                        spin.kill();
-                    })
             })
+                    .then(fileId => {
+                        spin.kill();
+                        
+                        // Take mongo object id response and send back to notify endpoint, if not in promise array
+                        if(resolve)
+                            resolve(fileId.replace(/"/g, ''));
+                        else
+                            this.notify(fileId.replace(/"/g, ''));
+                    })
             .catch(function (err) {
                 console.log(err);
                 spin.kill();
@@ -413,39 +438,37 @@ class Recorder extends Component {
 
     }
 
-    async notify(fileId) {
+    notify(fileId, resolve) {
 
-        let fd = new FormData();
-        fd.append('file', this.fileBlob);
-
-        fetch(this.baseUrl + '/api/upload/' + fileId, {
-                method: 'post',
-                body: fd
+        fetch(this.baseUrl + '/api/notify/' + fileId, {
+                method: 'post'
             })
             .then((response) => {
 
                 // Flow finished, reset state in 10 seconds
-                this.setState({
-                    uploaded: true,
-                    timeleft: 5
-                });
+                // this.setState({
+                //     uploaded: true,
+                //     timeleft: 5
+                // });
 
-                let resetTimer = setInterval(() => {
-                    let newTime = this.state.timeleft - 1;
-                    this.setState({
-                        timeleft: newTime
-                    });
-                    if (this.state.timeleft === 0) {
-                        clearInterval(resetTimer);
-                        TweenLite.to(document.getElementById('time'), 1, {
-                            y: '100%',
-                            autoAlpha: 0,
-                            visibility: 'hidden'
-                        });
-                        this.reset();
-                    }
-                }, 1000);
-                this.showTime();
+                // let resetTimer = setInterval(() => {
+                //     let newTime = this.state.timeleft - 1;
+                //     this.setState({
+                //         timeleft: newTime
+                //     });
+                //     if (this.state.timeleft === 0) {
+                //         clearInterval(resetTimer);
+                //         TweenLite.to(document.getElementById('time'), 1, {
+                //             y: '100%',
+                //             autoAlpha: 0,
+                //             visibility: 'hidden'
+                //         });
+                //         this.reset();
+                //     }
+                // }, 1000);
+                // this.showTime();
+
+                if(resolve) resolve();
 
                 return response;
             })
@@ -529,6 +552,10 @@ class Recorder extends Component {
                     </svg>
                     <div hidden={!uploading}><br />Uploading now. Thanks for your submission!</div>
                 </a>
+
+                <a
+                onClick={() => { this.uploadBackups(); }}>(DEBUG) BACKUP UPLOAD</a>
+
                 </div>
 
                 <div id="time" style={{visibility: 'hidden'}}>
