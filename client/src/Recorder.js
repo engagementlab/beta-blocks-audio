@@ -30,11 +30,14 @@ class Recorder extends Component {
         this.recordLimitSec = 60;
         this.recordElapsed = 0;
         this.uploadLimitSec = 10;
-
+        this.userLatLng = null;
 
         this.state = {
-            audioUrl: null,
+            adminMode: false,
+            adminFiles: null,
+
             allowStop: false,
+            audioUrl: null,
 
             playnow: false,
             playended: false,
@@ -53,6 +56,9 @@ class Recorder extends Component {
     }
 
     async componentDidMount() {
+
+        const { match: { params } } = this.props,
+              inAdminMode = params.mode === 'admin';
 
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
@@ -80,7 +86,13 @@ class Recorder extends Component {
         }
 
         // Create local indexdb for fallback saves
-        this.initLocalDb();
+        this.initLocalDb(inAdminMode);
+
+        // Get location
+        this.getLocation();
+
+        // Keyboard listener (admin toggle)
+        document.addEventListener("keydown", this.handleKeyDown);
 
         this.setState({
             stream
@@ -88,7 +100,7 @@ class Recorder extends Component {
 
     }
 
-    initLocalDb() {
+    initLocalDb(inAdminMode) {
 
         let req = indexedDB.open('audio');
         req.onerror = function (event) {
@@ -96,9 +108,16 @@ class Recorder extends Component {
             console.error('Unable to open local DB', event);
 
         };
-        req.onsuccess = (event) => {
+        req.onsuccess = async (event) => {
 
             this.localDb = event.target.result;
+
+            if(inAdminMode) {
+                this.setState({
+                    adminFiles: this.retrieveBackups(),
+                    adminMode: true
+                });
+            }
 
         };
         req.onupgradeneeded = function (event) {
@@ -151,6 +170,15 @@ class Recorder extends Component {
         };
 
         return navigator.mediaDevices.getUserMedia(params);
+    }
+
+    getLocation() {
+    
+        if(navigator.geolocation)
+            navigator.geolocation.getCurrentPosition((pos) => {
+                this.userLatLng = [pos.coords.latitude, pos.coords.longitude];
+            });
+
     }
 
     // Adopted from https://github.com/cwilso/volume-meter
@@ -341,34 +369,66 @@ class Recorder extends Component {
 
     }
 
+    async retrieveBackups() {
+        
+        let filesResult = [];
+        let getAllFiles = await this.localDb.transaction(['files']).objectStore('files').getAll();
+        // getAllFiles.onsuccess = () => {
+        //     if (getAllFiles.result)
+        //         filesResult = getAllFiles.result;
+        //     else
+        //         console.log('No files found.');
+        // };
+
+        // getAllFiles.onerror = function (err) {
+        //     console.error('Unable to get local files', err);
+        // }
+        console.log(getAllFiles)
+
+        return filesResult;
+
+    }
+
     uploadBackups() {
 
-        let getAllFiles = this.localDb.transaction(['files']).objectStore('files').getAll();
-        getAllFiles.onsuccess = () => {
-            if (getAllFiles.result) {
+        
+        let files = this.retrieveBackups();
+        // Create a promise for each file needing to be uploaded
+        let promisesUpload = [];
 
-                // Create a promise for each file needing to be uploaded
-                let promisesUpload = [];
+        for (let i in files) {
 
-                for (let i in getAllFiles.result) {
+            let record = files[i];
+            let blob = record.file;
 
-                    let record = getAllFiles.result[i];
-                    let blob = record.file;
+            promisesUpload.push(new Promise(resolve => this.upload(blob, resolve)));
 
-                    promisesUpload.push(new Promise(resolve => this.upload(blob, resolve)));
-
-                }
-
-                // TODO: Wipe local db on success
-                Promise.all(promisesUpload);
-
-            } else
-                console.log('No data record');
-        };
-
-        getAllFiles.onerror = function (err) {
-            console.error('Unable to get local files', err);
         }
+
+        // TODO: Wipe local db on success
+        Promise.all(promisesUpload);
+
+    }
+
+    renderBackupRecords() {
+
+        console.log(this.state.adminFiles)
+        if(!this.state.adminFiles) return;
+
+        return (
+            <div>
+            {
+                this.state.adminFiles.map(file => {
+                    return (
+                        <div id={file.id}>
+                        <dt>{file.datetime}</dt>
+                        <hr></hr>
+                        </div>
+                    );
+                })
+            }
+            </div>
+        );
     }
 
     reset() {
@@ -430,6 +490,8 @@ class Recorder extends Component {
 
         let fd = new FormData();
         fd.append('file', customData ? customData : this.fileBlob);
+        fd.append('datetime', Date.now());
+        fd.append('latlng', this.userLatLng);
 
         fetch(this.baseUrl + '/api/upload', {
                 method: 'post',
@@ -439,84 +501,95 @@ class Recorder extends Component {
             .then((response) => {
                 return response.text()
             })
-                    .then(fileId => {
-                        spin.kill();
-                        
-                        // Take mongo object id response and send back to notify endpoint, if not in promise array
-                        if(resolve)
-                            resolve(fileId.replace(/"/g, ''));
+            .then(fileId => {
+                spin.kill();
+                
+                if(resolve) {
+                    resolve(fileId.replace(/"/g, ''));
+                }
+                else {
+                    // End flow
+                    clearInterval(fetchTimeout);
+                    this.finish();
+                }
 
-                    })
+            })
             .catch((err) => {
-                console.error('Upload error', err);
-
-                // If there's been a problem (unreachable), store file locally and reset
+                console.info('Upload error; likely due to purposeful abort.');
+                console.error(err);
+                
+                // If there's been a problem (unreachable, signal timeout), store file locally and reset
                 this.storeBackup();
                 spin.kill();
+
+                // End flow
+                this.finish();
             });
             
+            // If upload takes to long, abort, and catch will save file locally
+            // Skip if called via promise
+            if(resolve) return;
             fetchTimeout = setInterval(() => {
                 
                 fetchDuration++;
                 if(fetchDuration >= this.uploadLimitSec)
                 {
-                    // this.storeBackup();
-                controller.abort();
-                fetchDuration = 0;
-                clearInterval(fetchTimeout);
-            }
+                    console.info('Upload took over ' + this.uploadLimitSec + 's, aborting and saving file to disk. Check for server errors and/or reliable connection.');
 
-        }, 1000);
+                    controller.abort();
+                    fetchDuration = 0;
+                    clearInterval(fetchTimeout);
+                }
+
+            }, 1000);
 
     }
 
-    notify(fileId, resolve) {
+    finish() {
 
-        fetch(this.baseUrl + '/api/notify/' + fileId, {
-                method: 'post'
-            })
-            .then((response) => {
+        // Flow finished, reset state in 10 seconds
+        this.setState({
+            uploaded: true,
+            timeleft: 5
+        });
 
-                // Flow finished, reset state in 10 seconds
-                // this.setState({
-                //     uploaded: true,
-                //     timeleft: 5
-                // });
-
-                // let resetTimer = setInterval(() => {
-                //     let newTime = this.state.timeleft - 1;
-                //     this.setState({
-                //         timeleft: newTime
-                //     });
-                //     if (this.state.timeleft === 0) {
-                //         clearInterval(resetTimer);
-                //         TweenLite.to(document.getElementById('time'), 1, {
-                //             y: '100%',
-                //             autoAlpha: 0,
-                //             visibility: 'hidden'
-                //         });
-                //         this.reset();
-                //     }
-                // }, 1000);
-                // this.showTime();
-
-                if(resolve) resolve();
-
-                return response;
-            })
-            .catch(function (err) {
-                console.log(err);
+        let resetTimer = setInterval(() => {
+            let newTime = this.state.timeleft - 1;
+            this.setState({
+                timeleft: newTime
             });
+            if (this.state.timeleft === 0) {
+                clearInterval(resetTimer);
+                TweenLite.to(document.getElementById('time'), 1, {
+                    y: '100%',
+                    autoAlpha: 0,
+                    visibility: 'hidden'
+                });
+                this.reset();
+            }
+        }, 1000);
+
+        this.showTime();
 
     }
 
     render() {
 
-        const { recording, recorded, playnow, playended, timeleft, uploaded, uploading } = this.state;
-        const transformStyle =  {transform: 'scale(' + this.state.scaleRecord + ')'};
-
+        const { adminMode, recording, recorded, playnow, playended, timeleft, uploaded, uploading } = this.state;
+      
         return (
             <div>
+                <div hidden={!adminMode}>
+
+                    <div id="localdata">
+                        {this.renderBackupRecords()}
+                    </div>
+
+                    <a onClick={() => { this.uploadBackups(); }}>(DEBUG) BACKUP UPLOAD</a>
+
+                </div>
+
+            <div hidden={adminMode}>
                 <h1 hidden={uploaded}>
                     <strong>
                     Recall your happiest memory walking, riding or driving through future Boston.
@@ -585,9 +658,6 @@ class Recorder extends Component {
                     <div hidden={!uploading}><br />Uploading now. Thanks for your submission!</div>
                 </a>
 
-                <a
-                onClick={() => { this.uploadBackups(); }}>(DEBUG) BACKUP UPLOAD</a>
-
                 </div>
 
                 <div id="time" style={{visibility: 'hidden'}}>
@@ -627,6 +697,7 @@ class Recorder extends Component {
                 
                 <AudioPlayerDOM src={this.state.audioUrl} hidden={true} playnow={playnow} />
          
+            </div>
             </div>
         );
 

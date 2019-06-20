@@ -11,7 +11,7 @@ import * as serviceWorker from './serviceWorker';
 const routing = (
     <Router>
         <div>
-            <Route path="/record" component={Recorder} />
+            <Route path="/record/:mode?" component={Recorder} />
             <Route path="/stream" component={Speaker} />
         </div>
     </Router>
