@@ -29,6 +29,7 @@ class Recorder extends Component {
         this.recordTimer = null;
         this.recordLimitSec = 60;
         this.recordElapsed = 0;
+        this.uploadLimitSec = 10;
 
 
         this.state = {
@@ -91,12 +92,12 @@ class Recorder extends Component {
 
         let req = indexedDB.open('audio');
         req.onerror = function (event) {
-            
+
             console.error('Unable to open local DB', event);
 
         };
         req.onsuccess = (event) => {
-            
+
             this.localDb = event.target.result;
 
         };
@@ -106,8 +107,14 @@ class Recorder extends Component {
             this.localDb = event.target.result;
 
             // Create an objectStore for this database
-            let store = this.localDb.createObjectStore('files', { keyPath: 'id', autoIncrement:true });
-            store.createIndex('datetime', 'datetime', { unique: true });
+            let store = this.localDb.createObjectStore('files', {
+                keyPath: 'id',
+                autoIncrement: true
+            });
+            // All files get a datetime field
+            store.createIndex('datetime', 'datetime', {
+                unique: true
+            });
 
         };
     }
@@ -282,24 +289,11 @@ class Recorder extends Component {
             let url = URL.createObjectURL(blob);
             this.fileBlob = blob;
 
-            // Local save
-            let transactionReq = this.localDb.transaction(['files'], 'readwrite')
-                                 .objectStore('files')
-                                 .add({file: this.fileBlob, datetime: Date.now()});
-
-            transactionReq.onsuccess = function(e) {
-              console.log('File saved to disk', e.result);
-            };
-
-            transactionReq.onerror = function(err) {
-                console.error('File save failed', err);
-              };
-        
             this.setState({
                 audioUrl: url,
                 recorded: true
             });
-        
+
         });
 
     }
@@ -327,37 +321,52 @@ class Recorder extends Component {
 
     }
 
+    storeBackup() {
+
+        // Local save
+        let transactionReq = this.localDb.transaction(['files'], 'readwrite')
+            .objectStore('files')
+            .add({
+                file: this.fileBlob,
+                datetime: Date.now()
+            });
+
+        transactionReq.onsuccess = function (e) {
+            console.log('File saved to disk', e.result);
+        };
+
+        transactionReq.onerror = function (err) {
+            console.error('File save failed', err);
+        };
+
+    }
+
     uploadBackups() {
 
         let getAllFiles = this.localDb.transaction(['files']).objectStore('files').getAll();
         getAllFiles.onsuccess = () => {
             if (getAllFiles.result) {
 
+                // Create a promise for each file needing to be uploaded
                 let promisesUpload = [];
-                let promisesNotify = [];
 
-                for(let i in getAllFiles.result) {
+                for (let i in getAllFiles.result) {
 
                     let record = getAllFiles.result[i];
                     let blob = record.file;
 
-
                     promisesUpload.push(new Promise(resolve => this.upload(blob, resolve)));
-                    
+
                 }
-                
-                Promise.all(promisesUpload).then((fileIds) => {
-                    Promise.all(fileIds.map((val) => {
-                        return new Promise(resolve => this.notify(val, resolve));
-                    }));
-                });
-                
-                } 
-                else
-                    console.log('No data record');
+
+                // TODO: Wipe local db on success
+                Promise.all(promisesUpload);
+
+            } else
+                console.log('No data record');
         };
 
-        getAllFiles.onerror = function(err) {
+        getAllFiles.onerror = function (err) {
             console.error('Unable to get local files', err);
         }
     }
@@ -399,7 +408,14 @@ class Recorder extends Component {
 
     upload(customData, resolve) {
 
-        // if (this.state.uploading) return;
+        // Prevent simultaneous upload unless called by promise chain
+        if (this.state.uploading && !resolve) return;
+
+        // Controller to abort fetch, if needed and duration counter
+        const controller = new AbortController(),
+              signal = controller.signal;
+        let fetchDuration = 0;
+        let fetchTimeout;
 
         // Animate to show work...
         let spin = TweenMax.to('#outer-upload', 3, {
@@ -417,7 +433,8 @@ class Recorder extends Component {
 
         fetch(this.baseUrl + '/api/upload', {
                 method: 'post',
-                body: fd
+                body: fd,
+                signal: signal
             })
             .then((response) => {
                 return response.text()
@@ -428,13 +445,28 @@ class Recorder extends Component {
                         // Take mongo object id response and send back to notify endpoint, if not in promise array
                         if(resolve)
                             resolve(fileId.replace(/"/g, ''));
-                        else
-                            this.notify(fileId.replace(/"/g, ''));
+
                     })
-            .catch(function (err) {
-                console.log(err);
+            .catch((err) => {
+                console.error('Upload error', err);
+
+                // If there's been a problem (unreachable), store file locally and reset
+                this.storeBackup();
                 spin.kill();
             });
+            
+            fetchTimeout = setInterval(() => {
+                
+                fetchDuration++;
+                if(fetchDuration >= this.uploadLimitSec)
+                {
+                    // this.storeBackup();
+                controller.abort();
+                fetchDuration = 0;
+                clearInterval(fetchTimeout);
+            }
+
+        }, 1000);
 
     }
 

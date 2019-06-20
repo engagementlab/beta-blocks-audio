@@ -7,7 +7,8 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var multer = require('multer');
 
-var app = express();
+const app = express(),
+      fs = require('fs');
 
 const mongodb = require('mongodb');
 const GridStream = require('gridfs-stream');
@@ -69,7 +70,9 @@ var upload = multer({
   storage: memory
 });
 
-const slackUpload = async (stream, fileId) => {
+const slackUpload = async (stream, fileId, resolve, reject) => {
+
+  try {
 
   const fileName = 'bb-audio_' + dateFormat(Date.now(), 'mm-d-yy h:MM:sstt') + '.wav';
   const result = await slackWeb.files.upload({
@@ -119,7 +122,11 @@ const slackUpload = async (stream, fileId) => {
     ]
   });
 
-  return result.file.url_private;
+  resolve(result.file.url_private);
+}
+catch(e) {
+  reject(e);
+}
 };
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {
@@ -128,31 +135,42 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
     const fileName = 'bb-audio-' + Date.now() + '.wav';
     const readableTrackStream = new Readable();
+    let uploadStream;
+    let fileId;
+
     readableTrackStream.push(req.file.buffer);
     readableTrackStream.push(null);
 
-    let bucket = new mongodb.GridFSBucket(db, {
-      bucketName: 'tracks'
-    });
+    new Promise((resolve, reject) => {
 
-    let uploadStream = bucket.openUploadStream(fileName, {
-      metadata: {
-        approved: false
-      }
-    });
-    let id = uploadStream.id;
+      let bucket = new mongodb.GridFSBucket(db, {
+        bucketName: 'tracks'
+      });
 
-    readableTrackStream.pipe(uploadStream);
+      uploadStream = bucket.openUploadStream(fileName, {
+        metadata: {
+          approved: false
+        }
+      });
+      fileId = uploadStream.id;
 
-    uploadStream.on('error', (err) => {
-      return res.status(500).json({
-        message: "Error uploading file: " + err
+      slackUpload(readableTrackStream, fileId, resolve, reject);
+
+    }).then(() => {
+      
+      readableTrackStream.pipe(uploadStream);
+
+      uploadStream.on('error', (err) => {
+        return res.status(500).json({
+          message: "Error uploading file: " + err
+        });
+      });
+
+      uploadStream.on('finish', () => {
+        return res.status(201).send('File with id "' + fileId + '" uploaded successfully');
       });
     });
 
-    uploadStream.on('finish', () => {
-      return res.status(201).send(id);
-    });
 
   } catch (e) {
 
@@ -163,34 +181,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 
 });
-
-app.post('/api/notify/:file_id?', async (req, res) => {
-    // Pull track and upload to slack
-      
-      try {
-        var trackId = new ObjectID(req.params.file_id);
-      } catch (err) {
-        return res.status(400).json({
-          message: 'Invalid trackId in URL parameter.'
-        });
-      }
-      
-      var read_stream = gfs.createReadStream({_id: trackId});
-      let file = [];
-      read_stream.on('data', function (chunk) {
-          file.push(chunk);
-      });
-      read_stream.on('error', e => {
-          console.log(e);
-          reject(e);
-      });
-      read_stream.on('end', function () {
-          console.log(file)
-          file = Buffer.concat(file);
-          // await slackUpload(data, req.params.file_id.replace(/"/g, ''));
-      });
-
-  });
 
 // Thanks: https://medium.com/@richard534/uploading-streaming-audio-using-nodejs-express-mongodb-gridfs-b031a0bcb20f
 app.get('/api/download/:id', (req, res) => {
