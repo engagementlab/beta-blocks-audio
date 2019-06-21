@@ -13,7 +13,6 @@
     "react-scripts": "3.0.1",
     "react-sound": "^1.2.0",
     "react-wave-stream": "^1.0.0",
-    "recorder-js": "^1.0.7",
     "recorderjs": "^1.0.1",
     "roundware-web-framework": "0.0.1-alpha.11"
   },
