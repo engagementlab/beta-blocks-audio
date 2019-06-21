@@ -8,11 +8,10 @@ import {
     TweenMax,
     Linear
 } from 'gsap';
+import dateformat from 'dateformat';
 
 import AudioPlayerDOM from './AudioPlayerDOM';
-import {
-    EventEmitter
-} from './EventEmitter';
+import { EventEmitter } from './EventEmitter';
 
 class Recorder extends Component {
 
@@ -35,6 +34,8 @@ class Recorder extends Component {
         this.state = {
             adminMode: false,
             adminFiles: null,
+            adminUploadDone: false,
+            adminUploadFailed: false,
 
             allowStop: false,
             audioUrl: null,
@@ -57,8 +58,7 @@ class Recorder extends Component {
 
     async componentDidMount() {
 
-        const { match: { params } } = this.props,
-              inAdminMode = params.mode === 'admin';
+        const inAdminMode = this.props.admin;
 
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
@@ -111,10 +111,11 @@ class Recorder extends Component {
         req.onsuccess = async (event) => {
 
             this.localDb = event.target.result;
+            let files = await new Promise((resolve, reject) => this.retrieveBackups(resolve));
 
             if(inAdminMode) {
                 this.setState({
-                    adminFiles: this.retrieveBackups(),
+                    adminFiles: files,
                     adminMode: true
                 });
             }
@@ -260,7 +261,8 @@ class Recorder extends Component {
 
             // console.log(audioContext)
             this.createAudioMeter(this.audioContext);
-            this.recorder = new RecorderJS(this.micSrc);
+            this.recorder = new RecorderJS(this.micSrc, {workerPath: process.env.PUBLIC_URL + '/recorderWorker.js'});
+            this.recorder.configure();
         }
 
         this.setState({
@@ -369,30 +371,23 @@ class Recorder extends Component {
 
     }
 
-    async retrieveBackups() {
+    retrieveBackups(resolve) {
         
-        let filesResult = [];
-        let getAllFiles = await this.localDb.transaction(['files']).objectStore('files').getAll();
-        // getAllFiles.onsuccess = () => {
-        //     if (getAllFiles.result)
-        //         filesResult = getAllFiles.result;
-        //     else
-        //         console.log('No files found.');
-        // };
-
-        // getAllFiles.onerror = function (err) {
-        //     console.error('Unable to get local files', err);
-        // }
-        console.log(getAllFiles)
-
-        return filesResult;
+        let tx = this.localDb.transaction(['files']);
+        let store = tx.objectStore('files');
+        let getAllFiles = store.getAll();
+        
+        getAllFiles.onsuccess = () => {
+            resolve(getAllFiles.result);
+        }
 
     }
 
-    uploadBackups() {
+    async uploadBackups() {
 
-        
-        let files = this.retrieveBackups();
+        // Get all files
+        let files = await new Promise((resolve) => this.retrieveBackups(resolve));
+
         // Create a promise for each file needing to be uploaded
         let promisesUpload = [];
 
@@ -406,27 +401,49 @@ class Recorder extends Component {
         }
 
         // TODO: Wipe local db on success
-        Promise.all(promisesUpload);
+        Promise.all(promisesUpload)
+        .then(() => { 
+            console.log('resolved!');
+            this.setState({adminUploadDone: true});
+        })
+        .catch(() => { console.log('failed!'); });
 
     }
 
     renderBackupRecords() {
 
-        console.log(this.state.adminFiles)
         if(!this.state.adminFiles) return;
+        let { adminUploadDone, adminUploadFailed } = this.state;
 
         return (
             <div>
-            {
-                this.state.adminFiles.map(file => {
-                    return (
-                        <div id={file.id}>
-                        <dt>{file.datetime}</dt>
-                        <hr></hr>
-                        </div>
-                    );
-                })
-            }
+            <div hidden={adminUploadDone}>
+                <h2>Files in database:</h2>
+                {
+                    this.state.adminFiles.map(file => {
+                        let date = dateformat(file.datetime, 'mm-d-yy h:MM:sstt');
+                        let size = Math.round(file.file.size / Math.pow(1024,2));
+                        return (
+                            <div key={file.id}>
+                            <span><em>Date:</em> {date}</span><br /><span><em>Size:</em> ~{size}mb</span>
+                            <hr></hr>
+                            </div>
+                        );
+                    })
+                }
+
+                <a
+                    className="yellow"
+                    onClick={() => { this.uploadBackups(); }}>
+                        Upload All
+                </a>
+            </div>
+            <div hidden={!adminUploadDone}>
+                Uploads finished. Refresh to check for future recordings.
+            </div>
+            <div hidden={!adminUploadFailed}>
+                Uploads failed. Make sure you have good connection.
+            </div>
             </div>
         );
     }
@@ -579,14 +596,11 @@ class Recorder extends Component {
       
         return (
             <div>
-                <div hidden={!adminMode}>
+                <div id="admin" hidden={!adminMode}>
 
                     <div id="localdata">
                         {this.renderBackupRecords()}
                     </div>
-
-                    <a onClick={() => { this.uploadBackups(); }}>(DEBUG) BACKUP UPLOAD</a>
-
                 </div>
 
             <div hidden={adminMode}>
@@ -615,7 +629,7 @@ class Recorder extends Component {
                     {
                         !recording ? 
                         
-                        <img src="img/rec-btn.svg" /> : 
+                        <img src={process.env.PUBLIC_URL + '/img/rec-btn.svg'} /> : 
 
                         <svg id="stopimg" width="300" height="300" fill="none" viewBox="0 0 300 300">
                             <circle id="outer" cx="150" cy="150" r="150" fill="url(#a)"/>

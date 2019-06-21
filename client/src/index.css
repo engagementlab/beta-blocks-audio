@@ -54,6 +54,10 @@ a.yellow {
   cursor: pointer;
 }
 
+#admin {
+  font-family: 'LunchtypeMed';
+}
+
 #playpause {
   margin-left: 5%;
 }
