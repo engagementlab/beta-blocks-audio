@@ -9,17 +9,18 @@ import {
     Linear
 } from 'gsap';
 import dateformat from 'dateformat';
+import NetworkSpeed from 'network-speed';
 
 import AudioPlayerDOM from './AudioPlayerDOM';
 import { EventEmitter } from './EventEmitter';
 
 class Recorder extends Component {
-
+    
     constructor(props) {
-
+        
         super(props);
         this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
-
+        
         this.audioContext = null;
         this.fileBlob = null;
         this.localDb = null;
@@ -30,35 +31,55 @@ class Recorder extends Component {
         this.recordElapsed = 0;
         this.uploadLimitSec = 10;
         this.userLatLng = null;
-
+        
         this.state = {
             adminMode: false,
             adminFiles: null,
             adminUploadDone: false,
             adminUploadFailed: false,
-
+            
             allowStop: false,
             audioUrl: null,
-
+            
             playnow: false,
             playended: false,
-
+            
             recording: false,
             recorded: false,
-
+            
             stream: null,
             scaleRecord: 0,
             timeleft: 0,
-
+            
             uploading: false,
             uploaded: false
         };
-
+        
     }
-
+    
     async componentDidMount() {
-
+        
         const inAdminMode = this.props.admin;
+        getNetworkDownloadSpeed();
+        
+        async function getNetworkDownloadSpeed() {
+            const testNetworkSpeed = new NetworkSpeed();
+            const data = JSON.stringify({
+                name: "John"
+            })
+            const options = {
+                hostname: "hookb.in",
+                port: 80,
+                path: "/K3eV7VBG0YSZoZWB2XRK",
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Content-Length": data.length
+                }
+              };
+              const speed = await testNetworkSpeed.checkUploadSpeed(options);
+              console.log(speed);
+        }
 
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
@@ -111,11 +132,10 @@ class Recorder extends Component {
         req.onsuccess = async (event) => {
 
             this.localDb = event.target.result;
-            let files = await new Promise((resolve, reject) => this.retrieveBackups(resolve));
 
             if(inAdminMode) {
+                this.retrieveBackups();
                 this.setState({
-                    adminFiles: files,
                     adminMode: true
                 });
             }
@@ -370,6 +390,14 @@ class Recorder extends Component {
         };
 
     }
+    
+    deleteBackup(id, resolve) {
+        
+        let tx = this.localDb.transaction(['files'], 'readwrite');
+        let store = tx.objectStore('files');
+        let getAllFiles = store.delete(id);
+
+    }
 
     retrieveBackups(resolve) {
         
@@ -378,7 +406,14 @@ class Recorder extends Component {
         let getAllFiles = store.getAll();
         
         getAllFiles.onsuccess = () => {
-            resolve(getAllFiles.result);
+
+            this.setState({
+                adminFiles: getAllFiles.result
+            });
+
+            if(resolve)
+                resolve(getAllFiles.result);
+
         }
 
     }
@@ -390,62 +425,78 @@ class Recorder extends Component {
 
         // Create a promise for each file needing to be uploaded
         let promisesUpload = [];
-
         for (let i in files) {
 
             let record = files[i];
             let blob = record.file;
 
-            promisesUpload.push(new Promise(resolve => this.upload(blob, resolve)));
+            promisesUpload.push(new Promise((resolve, reject) => this.upload(blob, resolve, reject, record.id)));
 
         }
 
         // TODO: Wipe local db on success
         Promise.all(promisesUpload)
-        .then(() => { 
-            console.log('resolved!');
-            this.setState({adminUploadDone: true});
+        .then((responses) => { 
+            responses.map(id => {
+                new Promise((resolve, reject) => this.deleteBackup(id, resolve));
+            });
+            this.setState({adminUploadDone: true, adminUploadFailed: false});
         })
-        .catch(() => { console.log('failed!'); });
+        .catch(() => { 
+            this.setState({adminUploadFailed: true});            
+        });
 
     }
 
     renderBackupRecords() {
 
-        if(!this.state.adminFiles) return;
+        // if(!this.state.adminFiles) return;
         let { adminUploadDone, adminUploadFailed } = this.state;
 
-        return (
-            <div>
-            <div hidden={adminUploadDone}>
-                <h2>Files in database:</h2>
-                {
-                    this.state.adminFiles.map(file => {
-                        let date = dateformat(file.datetime, 'mm-d-yy h:MM:sstt');
-                        let size = Math.round(file.file.size / Math.pow(1024,2));
-                        return (
-                            <div key={file.id}>
-                            <span><em>Date:</em> {date}</span><br /><span><em>Size:</em> ~{size}mb</span>
-                            <hr></hr>
-                            </div>
-                        );
-                    })
-                }
+        if(!this.state.adminFiles || this.state.adminFiles.length < 1) {
+            return (
+                <div>
+                    <h2>No files found.</h2>
+                </div>
+            );
+        }
+        else {
+            return (
+                <div>
+                <div hidden={adminUploadDone}>
+                    <h2>Files in database:</h2>
+                    {
 
-                <a
-                    className="yellow"
-                    onClick={() => { this.uploadBackups(); }}>
-                        Upload All
-                </a>
-            </div>
-            <div hidden={!adminUploadDone}>
-                Uploads finished. Refresh to check for future recordings.
-            </div>
-            <div hidden={!adminUploadFailed}>
-                Uploads failed. Make sure you have good connection.
-            </div>
-            </div>
-        );
+                        this.state.adminFiles.map(record => {
+                            if(record.file)
+                            {
+                                let date = dateformat(record.datetime, 'mm-d-yy h:MM:sstt');
+                                let size = Math.round(record.file.size / Math.pow(1024,2));
+                                return (
+                                    <div key={record.id}>
+                                    <span><em>Date:</em> {date}</span><br /><span><em>Size:</em> ~{size}mb</span>
+                                    <hr></hr>
+                                    </div>
+                                );
+                            }
+                        })
+                    }
+
+                    <a
+                        className="yellow"
+                        onClick={() => { this.uploadBackups(); }}>
+                            Upload All
+                    </a>
+                </div>
+                <div hidden={!adminUploadDone}>
+                    Uploads finished. Refresh to check for future recordings.
+                </div>
+                <div hidden={!adminUploadFailed}>
+                    Uploads failed for some or all files. Make sure you have good connection.
+                </div>
+                </div>
+            );
+        }
     }
 
     reset() {
@@ -483,7 +534,8 @@ class Recorder extends Component {
 
     }
 
-    upload(customData, resolve) {
+    // fileId specified by promise call for locally stored files
+    upload(customData, resolve, reject, fileId) {
 
         // Prevent simultaneous upload unless called by promise chain
         if (this.state.uploading && !resolve) return;
@@ -518,12 +570,11 @@ class Recorder extends Component {
             .then((response) => {
                 return response.text()
             })
-            .then(fileId => {
+            .then(() => {
                 spin.kill();
                 
-                if(resolve) {
-                    resolve(fileId.replace(/"/g, ''));
-                }
+                if(resolve)
+                    resolve(fileId);
                 else {
                     // End flow
                     clearInterval(fetchTimeout);
@@ -534,6 +585,9 @@ class Recorder extends Component {
             .catch((err) => {
                 console.info('Upload error; likely due to purposeful abort.');
                 console.error(err);
+
+                // Skip if called via promise
+                if(resolve) return;
                 
                 // If there's been a problem (unreachable, signal timeout), store file locally and reset
                 this.storeBackup();
@@ -544,11 +598,10 @@ class Recorder extends Component {
             });
             
             // If upload takes to long, abort, and catch will save file locally
-            // Skip if called via promise
-            if(resolve) return;
             fetchTimeout = setInterval(() => {
                 
                 fetchDuration++;
+                
                 if(fetchDuration >= this.uploadLimitSec)
                 {
                     console.info('Upload took over ' + this.uploadLimitSec + 's, aborting and saving file to disk. Check for server errors and/or reliable connection.');
@@ -556,6 +609,8 @@ class Recorder extends Component {
                     controller.abort();
                     fetchDuration = 0;
                     clearInterval(fetchTimeout);
+
+                    if(reject) reject();
                 }
 
             }, 1000);
