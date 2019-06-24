@@ -9,7 +9,6 @@ import {
     Linear
 } from 'gsap';
 import dateformat from 'dateformat';
-import NetworkSpeed from 'network-speed';
 
 import AudioPlayerDOM from './AudioPlayerDOM';
 import { EventEmitter } from './EventEmitter';
@@ -29,7 +28,7 @@ class Recorder extends Component {
         this.recordTimer = null;
         this.recordLimitSec = 60;
         this.recordElapsed = 0;
-        this.uploadLimitSec = 10;
+        this.uploadLimitSec = process.env.REACT_APP_UPLOAD_LIMIT;
         this.userLatLng = null;
         
         this.state = {
@@ -60,26 +59,17 @@ class Recorder extends Component {
     async componentDidMount() {
         
         const inAdminMode = this.props.admin;
-        getNetworkDownloadSpeed();
         
-        async function getNetworkDownloadSpeed() {
-            const testNetworkSpeed = new NetworkSpeed();
-            const data = JSON.stringify({
-                name: "John"
-            })
-            const options = {
-                hostname: "hookb.in",
-                port: 443,
-                path: "/K3eV7VBG0YSZoZWB2XRK",
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Content-Length": data.length
-                }
-              };
-              const speed = await testNetworkSpeed.checkUploadSpeed(options);
-              console.log(speed);
-        }
+        var speedTest = require('speedtest-net');
+        var test = speedTest();
+        test.on('data', data => {
+        console.dir(data);
+        });
+        
+        test.on('error', err => {
+        console.error(err);
+        });
+        
 
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
@@ -601,6 +591,7 @@ class Recorder extends Component {
             fetchTimeout = setInterval(() => {
                 
                 fetchDuration++;
+                console.log(fetchDuration, this.uploadLimitSec)
                 
                 if(fetchDuration >= this.uploadLimitSec)
                 {

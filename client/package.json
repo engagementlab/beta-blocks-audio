@@ -7,7 +7,6 @@
     "dateformat": "^3.0.3",
     "gsap": "^2.1.3",
     "howler": "^2.1.2",
-    "network-speed": "^2.0.1",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
     "react-router-dom": "^5.0.1",
@@ -15,7 +14,8 @@
     "react-sound": "^1.2.0",
     "react-wave-stream": "^1.0.0",
     "recorderjs": "^1.0.1",
-    "roundware-web-framework": "0.0.1-alpha.11"
+    "roundware-web-framework": "0.0.1-alpha.11",
+    "speedtest-net": "^1.5.1"
   },
   "scripts": {
     "start": "react-scripts start",
