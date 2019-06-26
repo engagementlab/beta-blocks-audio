@@ -23,7 +23,7 @@ class Speaker extends Component {
             trackIndex: 0
         }; 
         
-        this.soundPlayer = new Audio(backingTrack);
+        this.soundPlayer = new Audio('https://res.cloudinary.com/engagement-lab-home/video/upload/v1561565606/beta-blocks/backing.mp3');
     }
 
     async componentDidMount() {
