@@ -29,6 +29,7 @@ class Recorder extends Component {
         this.recordLimitSec = 60;
         this.recordElapsed = 0;
         this.uploadLimitSec = process.env.REACT_APP_UPLOAD_LIMIT;
+        this.uploadSpin = null;
         this.userLatLng = null;
         
         this.state = {
@@ -55,22 +56,49 @@ class Recorder extends Component {
         };
         
     }
+
+    reset() {
+
+        this.setState({
+
+            audioUrl: null,
+            allowStop: false,
+
+            playnow: false,
+            playended: false,
+
+            stream: null,
+
+            recording: false,
+            recorded: false,
+            recorder: null,
+
+            uploaded: false,
+            uploading: false
+
+        });
+
+        this.recordElapsed = 0;
+        this.recordLimitSec = 60;
+
+        this.recorder.clear();
+
+        this.uploadSpin.kill();
+    }
     
     async componentDidMount() {
         
         const inAdminMode = this.props.admin;
-        
-        var speedTest = require('speedtest-net');
-        var test = speedTest();
-        test.on('data', data => {
-        console.dir(data);
-        });
-        
-        test.on('error', err => {
-        console.error(err);
-        });
-        
 
+        // Animation to show upload work...
+        this.uploadSpin = TweenMax.to('#outer-upload', 3, {
+            rotation: 360,
+            ease: Linear.easeNone,
+            transformOrigin: 'center center',
+            repeat: -1,
+            paused: true
+        });
+        
         EventEmitter.subscribe('audiostart', () => {
             this.setState({
                 playended: false
@@ -489,33 +517,6 @@ class Recorder extends Component {
         }
     }
 
-    reset() {
-
-        this.setState({
-
-            audioUrl: null,
-            allowStop: false,
-
-            playnow: false,
-            playended: false,
-
-            stream: null,
-
-            recording: false,
-            recorded: false,
-            recorder: null,
-
-            uploaded: false,
-            uploading: false
-
-        });
-
-        this.recordElapsed = 0;
-        this.recordLimitSec = 60;
-        this.recorder.clear();
-
-    }
-
     async playStopStream() {
 
         this.setState({
@@ -536,13 +537,6 @@ class Recorder extends Component {
         let fetchDuration = 0;
         let fetchTimeout;
 
-        // Animate to show work...
-        let spin = TweenMax.to('#outer-upload', 3, {
-            rotation: 360,
-            ease: Linear.easeNone,
-            transformOrigin: 'center center',
-            repeat: -1
-        });
         this.setState({
             uploading: true
         });
@@ -551,6 +545,8 @@ class Recorder extends Component {
         fd.append('file', customData ? customData : this.fileBlob);
         fd.append('datetime', Date.now());
         fd.append('latlng', this.userLatLng);
+
+        this.uploadSpin.play();
 
         fetch(this.baseUrl + '/api/upload', {
                 method: 'post',
@@ -561,7 +557,7 @@ class Recorder extends Component {
                 return response.text()
             })
             .then(() => {
-                spin.kill();
+                this.uploadSpin.kill();
                 
                 if(resolve)
                     resolve(fileId);
@@ -581,7 +577,9 @@ class Recorder extends Component {
                 
                 // If there's been a problem (unreachable, signal timeout), store file locally and reset
                 this.storeBackup();
-                spin.kill();
+
+                // Stop animation
+                this.uploadSpin.kill();
 
                 // End flow
                 this.finish();
@@ -591,7 +589,7 @@ class Recorder extends Component {
             fetchTimeout = setInterval(() => {
                 
                 fetchDuration++;
-                console.log(fetchDuration, this.uploadLimitSec)
+                // console.log(fetchDuration, this.uploadLimitSec)
                 
                 if(fetchDuration >= this.uploadLimitSec)
                 {

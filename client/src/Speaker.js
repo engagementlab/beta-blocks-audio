@@ -70,6 +70,8 @@ class Speaker extends Component {
         let id = this.trackIds[this.state.trackIndex]['_id']; 
         if(!id) return;
 
+        console.log('Retrieving audio for id ' + id);
+
         var context = new AudioContext();
         
         fetch(this.baseUrl + '/api/download/'+id)
@@ -109,9 +111,9 @@ class Speaker extends Component {
                 <div hidden={!this.state.isStarted}>
                     <AudioPlayerDOM autoplay={true} src={this.state.audioUrl} />
                     
-                    {/* <audio id="backing" loop={true}>
+                    <audio id="backing" loop={true}>
                         <source src={backingTrack} />
-                    </audio> */}
+                    </audio>
                 </div>
                 
                 <div 
