@@ -8,13 +8,15 @@ var logger = require('morgan');
 var multer = require('multer');
 
 const app = express(),
-      fs = require('fs');
+  fs = require('fs');
 
 const mongodb = require('mongodb');
 const GridStream = require('gridfs-stream');
 const MongoClient = require('mongodb').MongoClient;
 const ObjectID = require('mongodb').ObjectID,
-  dateFormat = require('dateformat');
+  dateFormat = require('dateformat'),
+  axios = require('axios'),
+  FormData = require('form-data');;
 
 const {
   WebClient
@@ -70,119 +72,109 @@ var upload = multer({
   storage: memory
 });
 
-const slackUpload = async (stream, fileDate, fileId, resolve, reject) => {
-
-  try {
-
-    const fileNameFormatted = 'bb-audio_' + dateFormat(Date(fileDate), 'mm-d-yy h:MM:sstt') + '.wav';
-    const result = await slackWeb.files.upload({
-      channels: process.env.SLACK_CHANNEL,
-      filename: fileNameFormatted,
-      filetype: 'wav',
-      file: stream
-    });
-    let msg = "Please listen to submitted audio above and approve or delete. (_" + fileNameFormatted + "_) *Please note:* deletion is not currently reversable!";
-
-    await slackWeb.chat.postMessage({
-      text: '',
-      channel: process.env.SLACK_CHANNEL,
-      blocks: [{
-          "type": "section",
-          "text": {
-            "type": "mrkdwn",
-            "text": msg
-          }
-        },
-        {
-          "type": "actions",
-          "elements": [{
-              "type": "button",
-              "action_id": "approve",
-              "text": {
-                "type": "plain_text",
-                "text": "Approve",
-                "emoji": false
-              },
-              "style": "primary",
-              "value": fileId
-            },
-            {
-              "type": "button",
-              "action_id": "delete",
-              "text": {
-                "type": "plain_text",
-                "text": "Delete",
-                "emoji": false
-              },
-              "style": "danger",
-              "value": fileId
-            }
-          ]
-        }
-      ]
-    });
-
-    resolve(result.file.url_private);
-
-  }
-  catch(e) {
-    reject(e);
-  }
-
-};
-
 app.post('/api/upload', upload.single('file'), async (req, res) => {
 
-  try {
+  const fileName = 'bb-audio-' + req.body.datetime + '.wav';
+  const readableTrackStream = new Readable();
 
-    const fileName = 'bb-audio-' + req.body.datetime + '.wav';
-    const readableTrackStream = new Readable();
+  let uploadStream;
+  let fileId;
 
-    let uploadStream;
-    let fileId;
+  let save = new Promise((resolve, reject) => {
+
+    let bucket = new mongodb.GridFSBucket(db, {
+      bucketName: 'tracks'
+    });
+
+    uploadStream = bucket.openUploadStream(fileName, {
+      metadata: {
+        approved: false,
+        latlng: req.body.latlng
+      }
+    });
+    fileId = uploadStream.id;
 
     readableTrackStream.push(req.file.buffer);
     readableTrackStream.push(null);
 
-    new Promise((resolve, reject) => {
-
-      let bucket = new mongodb.GridFSBucket(db, {
-        bucketName: 'tracks'
-      });
-
-      uploadStream = bucket.openUploadStream(fileName, {
-        metadata: {
-          approved: false,
-          latlng: req.body.latlng
-        }
-      });
-      fileId = uploadStream.id;
-
-      slackUpload(readableTrackStream, req.body.datetime, fileId, resolve, reject);
-
-    }).then(() => {
-      
-      readableTrackStream.pipe(uploadStream);
-
-      uploadStream.on('error', (err) => {
-        return res.status(500).json({
-          message: "Error uploading file: " + err
-        });
-      });
-
-      uploadStream.on('finish', () => {
-        return res.status(201).send('File with id "' + fileId + '" uploaded successfully');
+    uploadStream.on('error', (err) => {
+      reject();
+      return res.status(500).json({
+        message: "Error uploading file: " + err
       });
     });
 
-
-  } catch (e) {
-
-    return res.status(500).json({
-      message: e
+    uploadStream.on('finish', () => {
+      resolve();
     });
 
-  }
+    readableTrackStream.pipe(uploadStream);
+
+  });
+
+  let notify = new Promise((resolve, reject) => {
+
+    const fileNameFormatted = 'bb-audio_' + dateFormat(Date(req.body.datetime), 'mm-d-yy h:MM:sstt') + '.wav';
+
+    const form = new FormData();
+    form.append('token', process.env.SLACK_TOKEN);
+    form.append('channels', process.env.SLACK_CHANNEL);
+    form.append('file', readableTrackStream, fileNameFormatted);
+
+    return axios.post('https://slack.com/api/files.upload', form, {
+      headers: form.getHeaders()
+    }).then(async (response) => {
+
+      let msg = "Please listen to submitted audio above and approve or delete. (_" + fileNameFormatted + "_) *Please note:* deletion is not currently reversable!";
+      await slackWeb.chat.postMessage({
+        text: '',
+        channel: process.env.SLACK_CHANNEL,
+        blocks: [{
+            "type": "section",
+            "text": {
+              "type": "mrkdwn",
+              "text": msg
+            }
+          },
+          {
+            "type": "actions",
+            "elements": [{
+                "type": "button",
+                "action_id": "approve",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Approve",
+                  "emoji": false
+                },
+                "style": "primary",
+                "value": fileId
+              },
+              {
+                "type": "button",
+                "action_id": "delete",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Delete",
+                  "emoji": false
+                },
+                "style": "danger",
+                "value": fileId
+              }
+            ]
+          }
+        ]
+      });
+
+      resolve();
+    });
+
+  });
+
+  await Promise.all([save, notify])
+    .catch((e) => {
+      console.error('error', e)
+    });
+  return res.status(201).send('done');
 
 });
 
@@ -222,7 +214,9 @@ app.get('/api/download/:id', (req, res) => {
 
 app.get('/api/list', (req, res) => {
 
-  db.collection('tracks.files').find({'metadata.approved': true}, {
+  db.collection('tracks.files').find({
+    'metadata.approved': true
+  }, {
     _id: 1
   }).toArray(function (err, result) {
 
@@ -276,8 +270,7 @@ app.post('/api/response', async (req, res) => {
         res.sendStatus(200)
 
       });
-    }
-    else {
+    } else {
       console.log('delete ' + record)
       db.collection('tracks.files').deleteOne(record, async (err, result) => {
 
@@ -289,7 +282,7 @@ app.post('/api/response', async (req, res) => {
           ts: timestamp,
           link_names: true
         };
-        
+
         // TODO: Don't remove buttons if fail in case of connection drop; we'll assume for now stable connection
         // if(test) bodyObj.blocks = response.message.blocks;
         await slackWeb.chat.update(bodyObj);

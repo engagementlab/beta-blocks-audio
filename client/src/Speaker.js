@@ -13,7 +13,8 @@ class Speaker extends Component {
         super(props) 
 
         this.soundPlayer = null;
-        this.baseUrl = process.env.NODE_ENV === 'production' ? 'https://audio.betablocks.city' : 'http://localhost:3001';
+        this.baseUrl = 'https://audio.betablocks.city'
+        //  : 'http://localhost:3001';
 
         this.state = {
             isStarted: false,
@@ -92,10 +93,6 @@ class Speaker extends Component {
                     isStarted: true
                 });
                 
-            }, (err) => {
-                // Skip track if bad data
-                this.nextTrack();
-                console.log('Unable to decode audio for id ' + id + ', skipping.');
             });
 
          })
