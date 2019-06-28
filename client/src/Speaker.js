@@ -93,6 +93,10 @@ class Speaker extends Component {
                     isStarted: true
                 });
                 
+            }, () => {
+                // Skip track if bad data
+                this.nextTrack();
+                console.log('Unable to decode audio for id ' + id + ', skipping.');
             });
 
          })

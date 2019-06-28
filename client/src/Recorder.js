@@ -409,11 +409,19 @@ class Recorder extends Component {
 
     }
     
-    deleteBackup(id, resolve) {
+    deleteBackup(id, resolve, reject) {
         
         let tx = this.localDb.transaction(['files'], 'readwrite');
         let store = tx.objectStore('files');
-        let getAllFiles = store.delete(id);
+        let deleteReq = store.delete(id);
+        deleteReq.onerror = () => {
+            console.error('Failed to remove backup file w/ id', id);
+            reject();
+        }
+        deleteReq.onsuccess = () => {
+            console.log('Removed backup w/ id', id);
+            resolve();
+        }
 
     }
 
@@ -626,7 +634,7 @@ class Recorder extends Component {
                     autoAlpha: 0,
                     visibility: 'hidden'
                 });
-                this.reset();
+                window.location.reload();
             }
         }, 1000);
 
