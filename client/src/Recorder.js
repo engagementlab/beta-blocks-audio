@@ -57,6 +57,7 @@ class Recorder extends Component {
         
     }
 
+    // Currently unused
     reset() {
 
         this.setState({
@@ -658,10 +659,10 @@ class Recorder extends Component {
             <div hidden={adminMode}>
                 <h1 hidden={uploaded}>
                     <strong>
-                    Recall your happiest memory walking, riding or driving through future Boston.
+                        Imagine you’re standing in this exact location twenty years from now. 
                     </strong>
                     <p>
-                    Pay attention to the technology, people and places around you.
+                        What do you see? What’s new? What’s the same?
                     </p>
                 </h1>
 

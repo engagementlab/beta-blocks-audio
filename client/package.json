@@ -1,6 +1,6 @@
 {
-  "name": "roundware-web",
-  "version": "0.1.0",
+  "name": "bb-audio-web",
+  "version": "0.4.0",
   "private": true,
   "dependencies": {
     "audiobuffer-to-wav": "^1.0.0",
